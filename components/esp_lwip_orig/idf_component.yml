@@ -1,0 +1,6 @@
+version: "0.0.1"
+description: esp-lwip-orig
+url: https://github.com/espressif/esp-protocols/tree/master/components/esp-lwip-orig
+dependencies:
+  idf:
+    version: ">4.4"

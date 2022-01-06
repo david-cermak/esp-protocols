@@ -54,6 +54,9 @@ int lwip_hook_netconn_external_resolve(const char *name, ip_addr_t *addr, u8_t a
 #define LWIP_HOOK_NETCONN_EXTERNAL_RESOLVE lwip_hook_netconn_external_resolve
 #endif /* CONFIG_LWIP_HOOK_NETCONN_EXTERNAL_RESOLVE... */
 
+struct netif *
+ip4_route_src_hook(const ip4_addr_t *src,const ip4_addr_t *dest);
+
 #ifdef __cplusplus
 }
 #endif
