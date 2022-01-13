@@ -98,3 +98,10 @@ ip4_route_src_hook(const ip4_addr_t *src,const ip4_addr_t *dest)
 }
 #endif
 #endif /* LWIP_HOOK_IP4_ROUTE_SRC */
+
+
+
+bool lwip_getsockopt_impl_ext(int s, int sock, int level, int optname, void *optval, socklen_t *optlen, int *err)
+{
+    return true;
+}

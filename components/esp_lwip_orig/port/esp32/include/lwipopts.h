@@ -1106,6 +1106,7 @@
 #endif
 #define LWIP_HOOK_FILENAME              "lwip_default_hooks.h"
 #define LWIP_HOOK_IP4_ROUTE_SRC         ip4_route_src_hook
+#define LWIP_HOOK_SOCKETS_GETSOCKOPT    lwip_getsockopt_impl_ext
 
 /*
    ---------------------------------------

@@ -17,6 +17,7 @@
 #include "lwip/ip_addr.h"
 #include "lwip/arch.h"
 #include "lwip/err.h"
+//#include "lwip/sockets.h"
 
 #ifdef ESP_IDF_LWIP_HOOK_FILENAME
 #include ESP_IDF_LWIP_HOOK_FILENAME
@@ -60,5 +61,10 @@ ip4_route_src_hook(const ip4_addr_t *src,const ip4_addr_t *dest);
 #ifdef __cplusplus
 }
 #endif
+
+typedef u32_t socklen_t;
+
+bool lwip_getsockopt_impl_ext(int s, int sock, int level, int optname, void *optval, socklen_t *optlen, int *err);
+
 
 #endif /* _LWIP_DEFAULT_HOOKS_H_ */
