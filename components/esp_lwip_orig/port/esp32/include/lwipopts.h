@@ -19,7 +19,7 @@
 #include "sdkconfig.h"
 #include "netif/dhcp_state.h"
 #include "sntp/sntp_get_set_time.h"
-
+#include "socket_ext.h"
 
 /*
    -----------------------------------------------
@@ -1107,6 +1107,7 @@
 #define LWIP_HOOK_FILENAME              "lwip_default_hooks.h"
 #define LWIP_HOOK_IP4_ROUTE_SRC         ip4_route_src_hook
 #define LWIP_HOOK_SOCKETS_GETSOCKOPT    lwip_getsockopt_impl_ext
+#define LWIP_HOOK_SOCKETS_SETSOCKOPT    lwip_setsockopt_impl_ext
 
 /*
    ---------------------------------------
