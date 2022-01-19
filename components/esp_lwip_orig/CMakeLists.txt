@@ -86,6 +86,7 @@ set(srcs
     "port/esp32/hooks/lwip_default_hooks.c"
     "port/esp32/debug/lwip_debug.c"
     "port/esp32/freertos/sys_arch.c"
+    "port/esp32/sockets_ext.c"
     "port/esp32/netif/wlanif.c"
     "port/esp32/netif/esp_pbuf_ref.c")
 
@@ -159,25 +160,25 @@ idf_component_register(SRCS "${srcs}"
                     PRIV_REQUIRES esp_netif tcpip_adapter)
 
 # lots of LWIP source files evaluate macros that check address of stack variables
-target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-address)
+#target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-address)
 
-set_source_files_properties(
-    lwip/src/netif/ppp/ppp.c
-    PROPERTIES COMPILE_FLAGS
-    -Wno-uninitialized
-    )
-set_source_files_properties(
-    lwip/src/netif/ppp/pppos.c
-    PROPERTIES COMPILE_FLAGS
-    -Wno-implicit-fallthrough
-    )
+#set_source_files_properties(
+#    lwip/src/netif/ppp/ppp.c
+#    PROPERTIES COMPILE_FLAGS
+#    -Wno-uninitialized
+#    )
+#set_source_files_properties(
+#    lwip/src/netif/ppp/pppos.c
+#    PROPERTIES COMPILE_FLAGS
+#    -Wno-implicit-fallthrough
+#    )
 # "comparison is always false due to limited range of data type" warning
 # when setting CONFIG_LWIP_TCP_WND_DEFAULT to 65535
-set_source_files_properties(
-    lwip/src/core/tcp.c
-    PROPERTIES COMPILE_FLAGS
-    -Wno-type-limits
-)
+#set_source_files_properties(
+#    lwip/src/core/tcp.c
+#    PROPERTIES COMPILE_FLAGS
+#    -Wno-type-limits
+#)
 
 if(CONFIG_OPENTHREAD_ENABLED)
     idf_component_optional_requires(PRIVATE openthread)

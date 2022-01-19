@@ -62,12 +62,12 @@ ip4_route_src_hook(const ip4_addr_t *src,const ip4_addr_t *dest);
 }
 #endif
 
-typedef u32_t socklen_t;
-struct lwip_sock;
+//typedef u32_t socklen_t;
+//struct lwip_sock;
 
 
-bool lwip_getsockopt_impl_ext(int s, struct lwip_sock* sock, int level, int optname, void *optval, socklen_t *optlen, int *err);
-bool lwip_setsockopt_impl_ext(int s, struct lwip_sock* sock, int level, int optname, const void *optval, socklen_t optlen, int *err);
+//bool lwip_getsockopt_impl_ext(int s, struct lwip_sock* sock, int level, int optname, void *optval, socklen_t *optlen, int *err);
+//bool lwip_setsockopt_impl_ext(int s, struct lwip_sock* sock, int level, int optname, const void *optval, socklen_t optlen, int *err);
 
 
 #endif /* _LWIP_DEFAULT_HOOKS_H_ */

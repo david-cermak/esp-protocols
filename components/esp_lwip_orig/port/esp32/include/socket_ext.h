@@ -1,4 +1,0 @@
-#pragma once
-#define IPV6_MULTICAST_IF    0x300
-#define IPV6_MULTICAST_HOPS  0x301
-#define IPV6_MULTICAST_LOOP  0x302
