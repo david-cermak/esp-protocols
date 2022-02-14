@@ -74,7 +74,7 @@ typedef struct {
         dhcps_lease_t dhcps_poll;
 } dhcps_options_t;
 
-typedef void (*dhcps_cb_t)(u8_t client_ip[4]);
+typedef void (*dhcps_cb_t)(u8_t client_ip[4], u8_t client_mac[6]);
 
 static inline bool dhcps_router_enabled (dhcps_offer_t offer)
 {

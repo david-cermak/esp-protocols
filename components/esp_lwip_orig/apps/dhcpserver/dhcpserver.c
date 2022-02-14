@@ -700,7 +700,7 @@ static void send_ack(struct dhcps_msg *m, u16_t len)
 #endif
 
     if (SendAck_err_t == ERR_OK) {
-        dhcps_cb(m->yiaddr);
+        dhcps_cb(m->yiaddr, m->chaddr);
     }
 
     if (p->ref != 0) {
