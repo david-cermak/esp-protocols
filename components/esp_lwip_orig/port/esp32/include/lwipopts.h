@@ -584,6 +584,7 @@
 #define LWIP_NETIF_STATUS_CALLBACK      0
 #endif
 
+#ifdef CONFIG_ESP_NETIF_TCPIP_LWIP_ORIG
 /**
  * LWIP_NETIF_EXT_STATUS_CALLBACK==1: Support an extended callback function
  * for several netif related event that supports multiple subscribers.
@@ -591,7 +592,6 @@
  * This ext-callback is used by ESP-NETIF with lwip-orig (upstream version)
  * to provide netif related events on IP4/IP6 address/status changes
  */
-#ifdef CONFIG_ESP_NETIF_TCPIP_LWIP_ORIG
 #define LWIP_NETIF_EXT_STATUS_CALLBACK  1
 #endif
 

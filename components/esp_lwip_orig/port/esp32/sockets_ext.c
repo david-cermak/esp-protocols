@@ -20,14 +20,17 @@
 
 bool lwip_setsockopt_impl_ext(struct lwip_sock* sock, int level, int optname, const void *optval, socklen_t optlen, int *err)
 {
-    if (level != IPPROTO_IPV6) {
+#if LWIP_IPV6
+    if (level != IPPROTO_IPV6)
+#endif /* LWIP_IPV6 */
+    {
         return false;
     }
 
+#if LWIP_IPV6
     switch (optname) {
         default:
             return false;
-#if ESP_IPV6
         case IPV6_MULTICAST_IF: /* NB: like IP_MULTICAST_IF, this takes an IP not an index */
         {
             LWIP_SOCKOPT_CHECK_OPTLEN_CONN_PCB_TYPE(sock, optlen, u8_t, NETCONN_UDP);
@@ -46,18 +49,22 @@ bool lwip_setsockopt_impl_ext(struct lwip_sock* sock, int level, int optname, co
                 udp_setflags(sock->conn->pcb.udp, udp_flags(sock->conn->pcb.udp) & ~UDP_FLAGS_MULTICAST_LOOP);
             }
             break;
-#endif/* ESP_IPV6 */
     }
 exit:
     return true;
+#endif /* LWIP_IPV6 */
 }
 
 bool lwip_getsockopt_impl_ext(struct lwip_sock* sock, int level, int optname, void *optval, uint32_t *optlen, int *err)
 {
-    if (level != IPPROTO_IPV6) {
+#if LWIP_IPV6
+    if (level != IPPROTO_IPV6)
+#endif /* LWIP_IPV6 */
+    {
         return false;
     }
 
+#if LWIP_IPV6
     switch (optname) {
         default:
             return false;
@@ -93,6 +100,7 @@ bool lwip_getsockopt_impl_ext(struct lwip_sock* sock, int level, int optname, vo
                     s, *(int *)optval));
             break;
     }
-    exit:
+exit:
     return true;
+#endif /* LWIP_IPV6 */
 }
