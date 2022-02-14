@@ -3,4 +3,4 @@ dependencies:
     version: '>4.4'
 description: esp-lwip-orig
 url: https://github.com/espressif/esp-protocols/tree/master/components/esp-lwip-orig
-version: 0.0.3
+version: 0.0.5
