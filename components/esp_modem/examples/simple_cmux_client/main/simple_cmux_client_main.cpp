@@ -90,7 +90,7 @@ extern "C" void app_main(void)
     if (dce->set_mode(esp_modem::modem_mode::CMUX_MODE)) {
         std::cout << "Modem has correctly entered multiplexed command/data mode" << std::endl;
     } else {
-        ESP_LOGE(TAG, "Failed to configure desired mode... exiting");
+        ESP_LOGE(TAG, "Failed to configure multiplexed command mode... exiting");
         return;
     }
 
