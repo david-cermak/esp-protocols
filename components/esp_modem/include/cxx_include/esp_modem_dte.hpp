@@ -104,9 +104,9 @@ private:
     size_t buffer_size;                                      /*!< Size of available DTE buffer */
     size_t consumed;                                         /*!< Indication of already processed portion in DTE buffer */
     std::unique_ptr<uint8_t[]> buffer;                       /*!< DTE buffer */
-    std::unique_ptr<Terminal> term;                          /*!< Primary terminal for this DTE */
-    Terminal *command_term;                                  /*!< Reference to the terminal used for sending commands */
-    std::unique_ptr<Terminal> other_term;                    /*!< Secondary terminal for this DTE */
+    std::shared_ptr<CMux> cmux_term;                        /*!< Primary terminal for this DTE */
+    std::shared_ptr<Terminal> command_term;                 /*!< Reference to the terminal used for sending commands */
+    std::shared_ptr<Terminal> data_term;                    /*!< Secondary terminal for this DTE */
     modem_mode mode;                                         /*!< DTE operation mode */
     SignalGroup signal;                                     /*!< Event group used to signal request-response operations */
     std::function<bool(uint8_t *data, size_t len)> on_data;  /*!< on data callback for current terminal */

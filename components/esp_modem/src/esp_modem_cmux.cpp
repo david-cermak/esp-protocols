@@ -273,7 +273,7 @@ bool CMux::on_footer(CMuxFrame &frame)
     return true;
 }
 
-bool CMux::on_cmux(uint8_t *data, size_t actual_len)
+bool CMux::on_cmux_data(uint8_t *data, size_t actual_len)
 {
     if (!data) {
 #ifdef DEFRAGMENT_CMUX_PAYLOAD
@@ -354,7 +354,7 @@ bool CMux::init()
     frame_header_offset = 0;
     state = cmux_state::INIT;
     term->set_read_cb([this](uint8_t *data, size_t len) {
-        this->on_cmux(data, len);
+        this->on_cmux_data(data, len);
         return false;
     });
 

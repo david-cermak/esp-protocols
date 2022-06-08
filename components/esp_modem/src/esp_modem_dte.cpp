@@ -24,7 +24,7 @@ static const size_t dte_default_buffer_size = 1000;
 DTE::DTE(const esp_modem_dte_config *config, std::unique_ptr<Terminal> terminal):
     buffer_size(config->dte_buffer_size), consumed(0),
     buffer(std::make_unique<uint8_t[]>(buffer_size)),
-    term(std::move(terminal)), command_term(term.get()), other_term(nullptr),
+    term(std::move(terminal)), command_term(term), other_term(nullptr),
     mode(modem_mode::UNDEF) {}
 
 DTE::DTE(std::unique_ptr<Terminal> terminal):
@@ -100,11 +100,11 @@ bool DTE::setup_cmux()
     if (!cmux_term->init()) {
         return false;
     }
-    term = std::make_unique<CMuxInstance>(cmux_term, 0);
+    term = std::make_shared<CMuxInstance>(cmux_term, 0);
     if (term == nullptr) {
         return false;
     }
-    command_term = term.get(); // use command terminal as previously
+    command_term = term; // use command terminal as previously
     other_term = std::make_unique<CMuxInstance>(cmux_term, 1);
     return true;
 }
@@ -124,7 +124,7 @@ bool DTE::set_mode(modem_mode m)
     if (m == modem_mode::DATA_MODE) {
         term->set_read_cb(on_data);
         if (other_term) { // if we have the other terminal, let's use it for commands
-            command_term = other_term.get();
+            command_term = other_term;
         }
     } else if (m == modem_mode::CMUX_MODE) {
         return setup_cmux();
