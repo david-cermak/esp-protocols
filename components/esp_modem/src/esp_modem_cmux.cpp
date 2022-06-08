@@ -415,7 +415,7 @@ void CMux::set_read_cb(int inst, std::function<bool(uint8_t *, size_t)> f)
     }
 }
 
-std::tuple<std::unique_ptr<Terminal>, std::unique_ptr<uint8_t[]>, size_t> esp_modem::CMux::deinit_and_eject()
+std::tuple<std::shared_ptr<Terminal>, std::unique_ptr<uint8_t[]>, size_t> esp_modem::CMux::deinit_and_eject()
 {
     if (exit_cmux_protocol()) {
         return std::make_tuple(std::move(term), std::move(buffer), buffer_size);

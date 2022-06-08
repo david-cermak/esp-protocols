@@ -69,7 +69,7 @@ public:
      * @return  nullptr on failure
      *          tuple of the original terminal and buffer on success
      */
-    std::tuple<std::unique_ptr<Terminal>, std::unique_ptr<uint8_t[]>, size_t> deinit_and_eject();
+    std::tuple<std::shared_ptr<Terminal>, std::unique_ptr<uint8_t[]>, size_t> deinit_and_eject();
 
     /**
      * @brief Sets read callback for the appropriate terminal
