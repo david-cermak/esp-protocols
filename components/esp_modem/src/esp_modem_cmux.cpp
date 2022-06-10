@@ -277,7 +277,7 @@ bool CMux::on_cmux_data(uint8_t *data, size_t actual_len)
 {
     if (!data) {
 #ifdef DEFRAGMENT_CMUX_PAYLOAD
-        auto data_to_read = buffer_size - 128; // keep 128 (max CMUX payload) backup buffer)
+        auto data_to_read = buffer.size - 128; // keep 128 (max CMUX payload) backup buffer)
         if (payload_start) {
             data = payload_start + total_payload_size;
             data_to_read = payload_len + 2;
@@ -324,7 +324,7 @@ bool CMux::on_cmux_data(uint8_t *data, size_t actual_len)
     return true;
 }
 
-bool CMux::exit_cmux_protocol()
+bool CMux::deinit()
 {
     sabm_ack = -1;
     for (size_t i = 1; i < 3; i++) {
@@ -415,10 +415,7 @@ void CMux::set_read_cb(int inst, std::function<bool(uint8_t *, size_t)> f)
     }
 }
 
-std::tuple<std::shared_ptr<Terminal>, std::unique_ptr<uint8_t[]>, size_t> esp_modem::CMux::deinit_and_eject()
+std::pair<std::shared_ptr<Terminal>, unique_buffer> CMux::detach()
 {
-    if (exit_cmux_protocol()) {
-        return std::make_tuple(std::move(term), std::move(buffer), buffer_size);
-    }
-    return std::tuple(nullptr, nullptr, 0);
+    return std::make_pair(std::move(term), std::move(buffer));
 }

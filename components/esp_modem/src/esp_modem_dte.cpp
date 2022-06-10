@@ -15,6 +15,7 @@
 #include <cstring>
 #include "esp_log.h"
 #include "cxx_include/esp_modem_dte.hpp"
+#include "cxx_include/esp_modem_cmux.hpp"
 #include "esp_modem_config.h"
 
 using namespace esp_modem;
@@ -69,25 +70,25 @@ command_result DTE::command(const std::string &cmd, got_line_cb got_line, uint32
 
 bool DTE::exit_cmux()
 {
-    auto ejected = cmux_term->deinit_and_eject();
-    if (ejected == std::tuple(nullptr, nullptr, 0)) {
+    if (!cmux_term->deinit()) {
         return false;
     }
-    // deinit succeeded -> swap the internal terminals with those ejected from cmux
-    command_term = std::move(std::get<0>(ejected));
-    buffer = std::move(std::get<1>(ejected));
-    buffer.size = std::get<2>(ejected);
+    auto ejected = cmux_term->detach();
+    // return the ejected terminal and buffer back to this DTE
+    command_term = std::move(ejected.first);
+    buffer = std::move(ejected.second);
+//    buffer.size = std::get<2>(ejected);
     data_term = command_term;
     return true;
 }
 
 bool DTE::setup_cmux()
 {
-    cmux_term = std::make_shared<CMux>(command_term, std::move(buffer), buffer_size);
+    cmux_term = std::make_shared<CMux>(command_term, std::move(buffer));
     if (cmux_term == nullptr) {
         return false;
     }
-    buffer_size = 0;
+//    buffer_size = 0;
     if (!cmux_term->init()) {
         return false;
     }
@@ -147,7 +148,7 @@ void DTE::set_read_cb(std::function<bool(uint8_t *, size_t)> f)
     data_term->set_read_cb([this](uint8_t *data, size_t len) {
         if (!data) { // if no data available from terminal callback -> need to explicitly read some
             data = buffer.get();
-            len = data_term->read(buffer.get(), buffer_size);
+            len = data_term->read(buffer.get(), buffer.size);
         }
         if (on_data) {
             return on_data(data, len);
@@ -158,7 +159,7 @@ void DTE::set_read_cb(std::function<bool(uint8_t *, size_t)> f)
 
 int DTE::read(uint8_t **d, size_t len)
 {
-    auto data_to_read = std::min(len, buffer_size);
+    auto data_to_read = std::min(len, buffer.size);
     auto data = buffer.get();
     auto actual_len = data_term->read(data, data_to_read);
     *d = data;

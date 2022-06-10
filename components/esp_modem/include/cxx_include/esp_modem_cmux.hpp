@@ -15,7 +15,6 @@
 #pragma once
 
 #include "esp_modem_terminal.hpp"
-#include "esp_modem_dte.hpp"
 #include "cxx_include/esp_modem_buffer.hpp"
 
 namespace esp_modem {
@@ -67,11 +66,18 @@ public:
     [[nodiscard]] bool init();
 
     /**
-     * @brief   Closes CMux protocol and ejects attached terminal and buffer
-     * @return  nullptr on failure
-     *          tuple of the original terminal and buffer on success
+     * @brief Closes and deinits CMux protocol
+     * @return true on success
      */
-    std::tuple<std::shared_ptr<Terminal>, std::unique_ptr<uint8_t[]>, size_t> deinit_and_eject();
+    [[nodiscard]] bool deinit();
+
+    /**
+     * @brief   Ejects the attached terminal and buffer,
+     * so they could be used as traditional command/data DTE's
+     * @return  pair of the original terminal and buffer
+     */
+    std::pair<std::shared_ptr<Terminal>, unique_buffer> detach();
+
 
     /**
      * @brief Sets read callback for the appropriate terminal
@@ -95,7 +101,6 @@ private:
     void send_sabm(size_t i);                           /*!< Sending initial SABM */
     void send_disc(size_t i);                           /*!< Sending closing request for each virtual terminal */
     void close_down();                                  /*!< Close up the control terminla (term=0) */
-    bool exit_cmux_protocol();                          /*!< Sequence of exit of all virtual terms and control term */
     bool on_cmux_data(uint8_t *data, size_t len);            /*!< Called from terminal layer when raw CMUX protocol data available */
 
     struct CMuxFrame;                                   /*!< Forward declare the Frame struct, used in protocol decoders */
@@ -131,7 +136,7 @@ private:
     /**
      * Processing buffer size and pointer
      */
-    size_t buffer_size;
+//    size_t buffer_size;
     unique_buffer buffer;
 
     Lock lock;

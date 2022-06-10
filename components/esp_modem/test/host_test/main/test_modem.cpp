@@ -77,6 +77,7 @@ TEST_CASE("DTE send/receive command", "[esp_modem]")
     CHECK(ret == command_result::OK);
 }
 
+
 TEST_CASE("DCE commands", "[esp_modem]")
 {
     auto term = std::make_unique<LoopbackTerm>();
@@ -96,7 +97,6 @@ TEST_CASE("DCE commands", "[esp_modem]")
     }, 1000);
     CHECK(ret == command_result::OK);
 }
-
 TEST_CASE("DCE AT commands", "[esp_modem]")
 {
     auto term = std::make_unique<LoopbackTerm>();
