@@ -15,6 +15,8 @@
 #pragma once
 
 #include "esp_modem_terminal.hpp"
+#include "esp_modem_dte.hpp"
+#include "cxx_include/esp_modem_buffer.hpp"
 
 namespace esp_modem {
 
@@ -54,8 +56,8 @@ class CMuxInstance;
  */
 class CMux {
 public:
-    explicit CMux(std::shared_ptr<Terminal> t, std::unique_ptr<uint8_t[]> b, size_t buff_size):
-        term(std::move(t)), payload_start(nullptr), total_payload_size(0), buffer_size(buff_size), buffer(std::move(b))  {}
+    explicit CMux(std::shared_ptr<Terminal> t, unique_buffer&& b):
+        term(std::move(t)), payload_start(nullptr), total_payload_size(0), buffer(std::move(b))  {}
     ~CMux() = default;
 
     /**
@@ -130,7 +132,7 @@ private:
      * Processing buffer size and pointer
      */
     size_t buffer_size;
-    std::unique_ptr<uint8_t[]> buffer;
+    unique_buffer buffer;
 
     Lock lock;
 };

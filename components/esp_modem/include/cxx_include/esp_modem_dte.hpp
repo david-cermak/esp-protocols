@@ -15,13 +15,14 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 #include <cstddef>
 #include <cstdint>
-#include <utility>
 #include "cxx_include/esp_modem_primitives.hpp"
 #include "cxx_include/esp_modem_terminal.hpp"
 #include "cxx_include/esp_modem_cmux.hpp"
 #include "cxx_include/esp_modem_types.hpp"
+#include "cxx_include/esp_modem_buffer.hpp"
 
 struct esp_modem_dte_config;
 
@@ -108,9 +109,10 @@ private:
     [[nodiscard]] bool exit_cmux();                          /*!< Exit of CMUX mode */
 
     Lock internal_lock{};                                    /*!< Locks DTE operations */
-    size_t buffer_size;                                      /*!< Size of available DTE buffer */
-    size_t consumed;                                         /*!< Indication of already processed portion in DTE buffer */
-    std::unique_ptr<uint8_t[]> buffer;                       /*!< DTE buffer */
+    unique_buffer buffer;
+//    size_t buffer_size;                                      /*!< Size of available DTE buffer */
+//    size_t consumed;                                         /*!< Indication of already processed portion in DTE buffer */
+//    std::unique_ptr<uint8_t[]> buffer;                       /*!< DTE buffer */
     std::shared_ptr<CMux> cmux_term;                        /*!< Primary terminal for this DTE */
     std::shared_ptr<Terminal> command_term;                 /*!< Reference to the terminal used for sending commands */
     std::shared_ptr<Terminal> data_term;                    /*!< Secondary terminal for this DTE */

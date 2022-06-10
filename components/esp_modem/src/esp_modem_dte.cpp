@@ -22,14 +22,12 @@ using namespace esp_modem;
 static const size_t dte_default_buffer_size = 1000;
 
 DTE::DTE(const esp_modem_dte_config *config, std::unique_ptr<Terminal> terminal):
-    buffer_size(config->dte_buffer_size), consumed(0),
-    buffer(std::make_unique<uint8_t[]>(buffer_size)),
+    buffer(config->dte_buffer_size),
     cmux_term(nullptr), command_term(std::move(terminal)), data_term(command_term),
     mode(modem_mode::UNDEF) {}
 
 DTE::DTE(std::unique_ptr<Terminal> terminal):
-    buffer_size(dte_default_buffer_size), consumed(0),
-    buffer(std::make_unique<uint8_t[]>(buffer_size)),
+    buffer(dte_default_buffer_size),
     cmux_term(nullptr), command_term(std::move(terminal)), data_term(command_term),
     mode(modem_mode::UNDEF) {}
 
@@ -40,18 +38,18 @@ command_result DTE::command(const std::string &command, got_line_cb got_line, ui
     command_term->set_read_cb([&](uint8_t *data, size_t len) {
         if (!data) {
             data = buffer.get();
-            len = command_term->read(data + consumed, buffer_size - consumed);
+            len = command_term->read(data + buffer.consumed, buffer.size - buffer.consumed);
         } else {
-            consumed = 0; // if the underlying terminal contains data, we cannot fragment
+            buffer.consumed = 0; // if the underlying terminal contains data, we cannot fragment
         }
-        if (memchr(data + consumed, separator, len)) {
-            res = got_line(data, consumed + len);
+        if (memchr(data + buffer.consumed, separator, len)) {
+            res = got_line(data, buffer.consumed + len);
             if (res == command_result::OK || res == command_result::FAIL) {
                 signal.set(GOT_LINE);
                 return true;
             }
         }
-        consumed += len;
+        buffer.consumed += len;
         return false;
     });
     command_term->write((uint8_t *)command.c_str(), command.length());
@@ -59,7 +57,7 @@ command_result DTE::command(const std::string &command, got_line_cb got_line, ui
     if (got_lf && res == command_result::TIMEOUT) {
         throw_if_esp_fail(ESP_ERR_INVALID_STATE);
     }
-    consumed = 0;
+    buffer.consumed = 0;
     command_term->set_read_cb(nullptr);
     return res;
 }
@@ -78,7 +76,7 @@ bool DTE::exit_cmux()
     // deinit succeeded -> swap the internal terminals with those ejected from cmux
     command_term = std::move(std::get<0>(ejected));
     buffer = std::move(std::get<1>(ejected));
-    buffer_size = std::get<2>(ejected);
+    buffer.size = std::get<2>(ejected);
     data_term = command_term;
     return true;
 }
@@ -170,4 +168,14 @@ int DTE::read(uint8_t **d, size_t len)
 int DTE::write(uint8_t *data, size_t len)
 {
     return data_term->write(data, len);
+}
+
+unique_buffer::unique_buffer(size_t size):
+    data(std::make_unique<uint8_t[]>(size)), size(size), consumed(0)
+{
+}
+
+uint8_t* unique_buffer::get() const
+{
+    return data.get();
 }
