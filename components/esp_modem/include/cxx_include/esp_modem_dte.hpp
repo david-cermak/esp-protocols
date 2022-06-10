@@ -94,13 +94,20 @@ public:
      */
     command_result command(const std::string &command, got_line_cb got_line, uint32_t time_ms, char separator) override;
 
+protected:
+    /**
+     * @brief Allows for locking the DTE
+     */
+    void lock()     { internal_lock.lock();   }
+    void unlock()   { internal_lock.unlock(); }
+    friend class Scoped<DTE>;                               /*!< Declaring "Scoped<DTE> lock(dte)" locks this instance */
 private:
     static const size_t GOT_LINE = SignalGroup::bit0;       /*!< Bit indicating response available */
 
     [[nodiscard]] bool setup_cmux();                         /*!< Internal setup of CMUX mode */
     [[nodiscard]] bool exit_cmux();                          /*!< Exit of CMUX mode */
 
-    Lock lock{};                                            /*!< Locks DTE operations */
+    Lock internal_lock{};                                    /*!< Locks DTE operations */
     size_t buffer_size;                                      /*!< Size of available DTE buffer */
     size_t consumed;                                         /*!< Indication of already processed portion in DTE buffer */
     std::unique_ptr<uint8_t[]> buffer;                       /*!< DTE buffer */

@@ -35,7 +35,7 @@ DTE::DTE(std::unique_ptr<Terminal> terminal):
 
 command_result DTE::command(const std::string &command, got_line_cb got_line, uint32_t time_ms, const char separator)
 {
-    Scoped<Lock> l(lock);
+    Scoped<Lock> l(internal_lock);
     command_result res = command_result::TIMEOUT;
     command_term->set_read_cb([&](uint8_t *data, size_t len) {
         if (!data) {
@@ -79,7 +79,7 @@ bool DTE::exit_cmux()
     command_term = std::move(std::get<0>(ejected));
     buffer = std::move(std::get<1>(ejected));
     buffer_size = std::get<2>(ejected);
-    data_term = nullptr;
+    data_term = command_term;
     return true;
 }
 
@@ -103,20 +103,42 @@ bool DTE::setup_cmux()
 
 bool DTE::set_mode(modem_mode m)
 {
-    if (mode == modem_mode::CMUX_MODE && m == modem_mode::COMMAND_MODE) {
-        if (exit_cmux()) {
+    // transitions (COMMAND|UNDEF) -> CMUX
+    if (m == modem_mode::CMUX_MODE) {
+        if (mode == modem_mode::UNDEF || mode == modem_mode::COMMAND_MODE) {
+            if (setup_cmux()) {
+                mode = m;
+                return true;
+            }
+            mode = modem_mode::UNDEF;
+            return false;
+        }
+    }
+    // transitions (COMMAND|CMUX|UNDEF) -> DATA
+    if (m == modem_mode::DATA_MODE) {
+        if (mode == modem_mode::CMUX_MODE) {
+            // mode stays the same, but need to swap terminals (as command has been switch)
+            data_term.swap(command_term);
+        } else {
+            mode = m;
+        }
+        // prepare the data terminal's callback to the configured std::function (used by netif)
+        data_term->set_read_cb(on_data);
+        return true;
+    }
+    // transitions (DATA|CMUX|UNDEF) -> COMMAND
+    if (m == modem_mode::COMMAND_MODE) {
+        if (mode == modem_mode::CMUX_MODE) {
+            if (exit_cmux()) {
+                mode = m;
+                return true;
+            }
+            mode = modem_mode::UNDEF;
+            return false;
+        } else {
             mode = m;
             return true;
         }
-        return false;
-    }
-    if (mode != modem_mode::CMUX_MODE) {    // keep CMUX internally, it's CMD+PPP
-        mode = m;
-    }
-    if (m == modem_mode::DATA_MODE) {
-        data_term->set_read_cb(on_data);
-    } else if (m == modem_mode::CMUX_MODE) {
-        return setup_cmux();
     }
     return true;
 }
