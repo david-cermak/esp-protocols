@@ -64,7 +64,7 @@ int LoopbackTerm::write(uint8_t *data, size_t len)
     }
     if (len > 2 && data[0] == 0xf9) { // Simple CMUX responder
         // turn the request into a reply -> implements CMUX loopback
-        if (data[2] == 0x3f) {  // SABM command
+        if (data[2] == 0x3f || data[2] == 0x53) {  // SABM command
             data[2] = 0x73;
         } else if (data[2] == 0xef) { // Generic request
             data[2] = 0xff;         // generic reply

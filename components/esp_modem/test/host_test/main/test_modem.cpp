@@ -128,9 +128,21 @@ TEST_CASE("DCE modes", "[esp_modem]")
     auto dce = create_SIM7600_dce(&dce_config, dte, &netif);
     CHECK(dce != nullptr);
 
+    // UNDER -> CMD (OK)
     CHECK(dce->set_mode(esp_modem::modem_mode::COMMAND_MODE) == true);
+    // CMD -> CMD (Fail)
     CHECK(dce->set_mode(esp_modem::modem_mode::COMMAND_MODE) == false);
+    // CMD -> DATA (OK)
     CHECK(dce->set_mode(esp_modem::modem_mode::DATA_MODE) == true);
+    // DATA -> CMUX (Fail)
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MODE) == false);
+    // DATA back -> CMD (OK)
+    CHECK(dce->set_mode(esp_modem::modem_mode::COMMAND_MODE) == true);
+    // CMD -> CMUX (OK)
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MODE) == true);
+    // CMUX -> DATA (Fail)
+    CHECK(dce->set_mode(esp_modem::modem_mode::DATA_MODE) == false);
+    // CMUX back -> CMD (OK)
     CHECK(dce->set_mode(esp_modem::modem_mode::COMMAND_MODE) == true);
 }
 
