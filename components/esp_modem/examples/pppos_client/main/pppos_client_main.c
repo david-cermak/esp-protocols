@@ -9,6 +9,7 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "freertos/queue.h"
 #include "esp_netif.h"
 #include "esp_netif_ppp.h"
 #include "mqtt_client.h"
@@ -21,6 +22,7 @@ static const char *TAG = "pppos_example";
 static EventGroupHandle_t event_group = NULL;
 static const int CONNECT_BIT = BIT0;
 static const int GOT_DATA_BIT = BIT2;
+static const int HOUSE_KEEPING_DONE = BIT3;
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
@@ -108,6 +110,83 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
     }
 }
 
+typedef enum {
+    GET_SIGNAL_QUALITY,
+    GET_BATTERY_STATUS,
+    EXIT
+} command_type_t;
+
+struct async_params {
+    QueueHandle_t queue;
+    esp_modem_dce_t *dce;
+    void (*callback)(command_type_t, esp_err_t, int , int );
+};
+
+static void house_keeping(void *pvParameters)
+{
+    struct async_params *params = (struct async_params*)pvParameters;
+    bool running = true;
+    while (running) {
+        command_type_t command_type;
+        if (xQueueReceive(params->queue, &command_type, portMAX_DELAY)) {
+            switch (command_type) {
+
+                case GET_SIGNAL_QUALITY:
+                    {
+                        int rssi, ber;
+                        esp_err_t err = esp_modem_get_signal_quality(params->dce, &rssi, &ber);
+                        if (params->callback) {
+                            params->callback(command_type, err, rssi, ber);
+                        }
+                    }
+                    break;
+
+                case GET_BATTERY_STATUS:
+                    {
+                        int volt, bcc, bcl;
+                        esp_err_t err = esp_modem_get_battery_status(params->dce, &volt, &bcc, &bcl);
+                        if (params->callback) {
+                            params->callback(command_type, err, volt, 0);
+                        }
+                    }
+                    break;
+
+                case EXIT:
+                    if (params->callback) {
+                        params->callback(command_type, ESP_OK, 0, 0);
+                    }
+                    running = false;
+                    break;
+            }
+        }
+
+    }
+    vTaskDelete(NULL);
+}
+
+void command_cb(command_type_t command_type, esp_err_t err, int p1, int p2)
+{
+    switch (command_type) {
+
+        case GET_SIGNAL_QUALITY:
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "esp_modem_get_signal_quality failed with %d", err);
+            } else {
+                ESP_LOGI(TAG, "Signal quality: rssi=%d, ber=%d", p1, p2);
+            }
+            break;
+        case GET_BATTERY_STATUS:
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "esp_modem_get_battery_status failed with %d", err);
+            } else {
+                ESP_LOGI(TAG, "Voltage: %d mV", p1);
+            }
+            break;
+        case EXIT:
+            xEventGroupSetBits(event_group, HOUSE_KEEPING_DONE);
+            break;
+    }
+}
 
 void app_main(void)
 {
@@ -160,6 +239,14 @@ void app_main(void)
 #endif
     assert(dce);
 
+    struct async_params params = {
+            .queue = xQueueCreate(10, sizeof(command_type_t)),
+            .dce = dce,
+            .callback = command_cb,
+    };
+    xTaskCreate(house_keeping, "house_keeping", 2048, (void*)&params, 5, NULL);
+
+
 #if CONFIG_EXAMPLE_NEED_SIM_PIN == 1
     // check if PIN needed
     bool pin_ok = false;
@@ -171,15 +258,22 @@ void app_main(void)
         }
     }
 #endif
-
-    int rssi, ber;
-    esp_err_t err = esp_modem_get_signal_quality(dce, &rssi, &ber);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_modem_get_signal_quality failed with %d", err);
+    command_type_t cmd = GET_SIGNAL_QUALITY;
+    if (!xQueueSend(params.queue, &cmd, portMAX_DELAY)) {
+        ESP_LOGE(TAG, "Failed to queue GET_SIGNAL_QUALITY command");
         return;
     }
-    ESP_LOGI(TAG, "Signal quality: rssi=%d, ber=%d", rssi, ber);
-
+    cmd = GET_BATTERY_STATUS;
+    if (!xQueueSend(params.queue, &cmd, portMAX_DELAY)) {
+        ESP_LOGE(TAG, "Failed to queue GET_BATTERY_STATUS command");
+        return;
+    }
+    cmd = EXIT;
+    if (!xQueueSend(params.queue, &cmd, portMAX_DELAY)) {
+        ESP_LOGE(TAG, "Failed to exit the house-keeping task");
+        return;
+    }
+    xEventGroupWaitBits(event_group, HOUSE_KEEPING_DONE, pdTRUE, pdTRUE, portMAX_DELAY);
 #if CONFIG_EXAMPLE_SEND_MSG
     if (esp_modem_sms_txt_mode(dce, true) != ESP_OK || esp_modem_sms_character_set(dce) != ESP_OK) {
         ESP_LOGE(TAG, "Setting text mode or GSM character set failed");
@@ -193,7 +287,7 @@ void app_main(void)
     }
 #endif
 
-    err = esp_modem_set_mode(dce, ESP_MODEM_MODE_DATA);
+    esp_err_t err = esp_modem_set_mode(dce, ESP_MODEM_MODE_DATA);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_modem_set_mode(ESP_MODEM_MODE_DATA) failed with %d", err);
         return;
