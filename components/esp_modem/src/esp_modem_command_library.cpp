@@ -18,6 +18,7 @@
 #include "cxx_include/esp_modem_dte.hpp"
 #include "cxx_include/esp_modem_dce_module.hpp"
 #include "cxx_include/esp_modem_command_library.hpp"
+#include <cstring>
 
 namespace esp_modem::dce_commands {
 
@@ -558,6 +559,93 @@ command_result set_gnss_power_mode_sim76xx(CommandableIf *t, int mode)
 {
     ESP_LOGV(TAG, "%s", __func__ );
     return generic_command_common(t, "AT+CGPS=" + std::to_string(mode) + "\r");
+}
+
+command_result net_open(CommandableIf *t)
+{
+    ESP_LOGW(TAG, "%s", __func__ );
+    return generic_command_common(t, "AT+NETOPEN\r");
+}
+
+command_result net_close(CommandableIf *t)
+{
+    ESP_LOGW(TAG, "%s", __func__ );
+    return generic_command_common(t, "AT+NETCLOSE\r");
+}
+
+command_result tcp_open(CommandableIf *t, const std::string& host, int port, int timeout)
+{
+    ESP_LOGW(TAG, "%s", __func__ );
+    auto ret = generic_command_common(t, "AT+CIPRXGET=1\r", 50000);
+    if (ret != command_result::OK) {
+        ESP_LOGE(TAG, "Setting Rx mode failed!");
+        return ret;
+    }
+    ESP_LOGW(TAG, "%s", __func__ );
+    std::string ip_open = R"(AT+CIPOPEN=0,"TCP",")" + host + "\"," + std::to_string(port) + "\r";
+    ret = generic_command(t, ip_open, "+CIPOPEN:", "ERROR", timeout);
+    if (ret != command_result::OK) {
+        ESP_LOGE(TAG, "%s Failed", __func__ );
+        return ret;
+    }
+    return command_result::OK;
+}
+
+command_result tcp_close(CommandableIf *t)
+{
+    ESP_LOGW(TAG, "%s", __func__ );
+    return generic_command(t, "AT+CIPCLOSE=0", "+CIPCLOSE:", "ERROR", 2000);
+}
+
+command_result tcp_send(CommandableIf *t, uint8_t *data, size_t len)
+{
+    ESP_LOGW(TAG, "%s", __func__ );
+    std::string send = "AT+CIPSEND=0," + std::to_string(len) + "\r";
+    auto ret = t->command(send, [&](uint8_t *data, size_t len) {
+        std::string_view response((char *)data, len);
+        ESP_LOGI(TAG, "CIPSEND response %.*s", static_cast<int>(response.size()), response.data());
+        if (response.find('>') != std::string::npos) {
+            return command_result::OK;
+        }
+        return command_result::TIMEOUT;
+    }, 5000, '>');
+    ESP_LOGW(TAG, "2%s", __func__ );
+    if (ret != command_result::OK) {
+        return ret;
+    }
+    size_t cmd_len = send.size();
+    send.resize(cmd_len + len + 1);
+    memcpy((char*)send.c_str() + cmd_len, data, len);
+    *((char*)send.c_str() + cmd_len + 1) = '\x1A';
+    return generic_command(t, send, "+CIPSEND:", "ERROR", 120000);
+}
+
+command_result tcp_recv(CommandableIf *t, uint8_t *data, size_t len)
+{
+    ESP_LOGW(TAG, "%s", __func__ );
+//    auto ret = generic_command_common(t, "AT+CIPRXGET=1\n");
+//    if (ret != command_result::OK) {
+//        ESP_LOGE(TAG, "%s Failed", __func__ );
+//        return ret;
+//    }
+    std::string_view out;
+    auto ret = generic_get_string(t, "AT+CIPRXGET=4,0\r", out);
+    if (ret != command_result::OK) {
+        return ret;
+    }
+    constexpr std::string_view pattern = "+CIPRXGET: 4,0,";
+    if (out.find(pattern) == std::string::npos) {
+        return command_result::FAIL;
+    }
+    size_t data_len;
+    if (std::from_chars(out.data() + pattern.size(), out.data() + out.size(), data_len).ec == std::errc::invalid_argument) {
+        return command_result::FAIL;
+    }
+    ESP_LOGI(TAG, "size=%d", data_len);
+    ret = generic_get_string(t, "AT+CIPRXGET=3,0,100\r", out);
+    ESP_LOGI(TAG, "data=%s", out.data());
+    return command_result::OK;
+
 }
 
 } // esp_modem::dce_commands

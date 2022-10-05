@@ -51,6 +51,15 @@ command_result set_network_bands_sim76xx(CommandableIf *t, const std::string& mo
 command_result power_down_sim8xx(CommandableIf *t);
 command_result set_data_mode_sim8xx(CommandableIf *t);
 
+command_result net_open(CommandableIf *t);
+command_result net_close(CommandableIf *t);
+command_result tcp_open(CommandableIf *t, const std::string& host, int port, int timeout);
+command_result tcp_close(CommandableIf *t);
+command_result tcp_send(CommandableIf *t, uint8_t *data, size_t len);
+command_result tcp_recv(CommandableIf *t, uint8_t *data, size_t len);
+
+
+
 /**
  * @}
  */
