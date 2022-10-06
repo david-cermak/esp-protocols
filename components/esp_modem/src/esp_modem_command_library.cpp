@@ -564,13 +564,13 @@ command_result set_gnss_power_mode_sim76xx(CommandableIf *t, int mode)
 command_result net_open(CommandableIf *t)
 {
     ESP_LOGW(TAG, "%s", __func__ );
-    return generic_command_common(t, "AT+NETOPEN\r");
+    return generic_command(t, "AT+NETOPEN\r", "+NETOPEN:", "ERROR", 30000);
 }
 
 command_result net_close(CommandableIf *t)
 {
     ESP_LOGW(TAG, "%s", __func__ );
-    return generic_command_common(t, "AT+NETCLOSE\r");
+    return generic_command(t, "AT+NETCLOSE\r", "+NETCLOSE:", "ERROR", 30000);
 }
 
 command_result tcp_open(CommandableIf *t, const std::string& host, int port, int timeout)
@@ -583,7 +583,7 @@ command_result tcp_open(CommandableIf *t, const std::string& host, int port, int
     }
     ESP_LOGW(TAG, "%s", __func__ );
     std::string ip_open = R"(AT+CIPOPEN=0,"TCP",")" + host + "\"," + std::to_string(port) + "\r";
-    ret = generic_command(t, ip_open, "+CIPOPEN:", "ERROR", timeout);
+    ret = generic_command(t, ip_open, "+CIPOPEN: 0,0", "ERROR", timeout);
     if (ret != command_result::OK) {
         ESP_LOGE(TAG, "%s Failed", __func__ );
         return ret;
@@ -594,7 +594,7 @@ command_result tcp_open(CommandableIf *t, const std::string& host, int port, int
 command_result tcp_close(CommandableIf *t)
 {
     ESP_LOGW(TAG, "%s", __func__ );
-    return generic_command(t, "AT+CIPCLOSE=0", "+CIPCLOSE:", "ERROR", 2000);
+    return generic_command(t, "AT+CIPCLOSE=0\r", "+CIPCLOSE:", "ERROR", 10000);
 }
 
 command_result tcp_send(CommandableIf *t, uint8_t *data, size_t len)
@@ -608,19 +608,33 @@ command_result tcp_send(CommandableIf *t, uint8_t *data, size_t len)
             return command_result::OK;
         }
         return command_result::TIMEOUT;
-    }, 5000, '>');
-    ESP_LOGW(TAG, "2%s", __func__ );
+    }, 50000, '>');
     if (ret != command_result::OK) {
         return ret;
     }
-    size_t cmd_len = send.size();
-    send.resize(cmd_len + len + 1);
-    memcpy((char*)send.c_str() + cmd_len, data, len);
-    *((char*)send.c_str() + cmd_len + 1) = '\x1A';
-    return generic_command(t, send, "+CIPSEND:", "ERROR", 120000);
+    auto written = t->write(data, len);
+    if (written != len) {
+        return command_result::FAIL;
+    }
+    ret = t->command("", [&](uint8_t *data, size_t len) {
+        std::string_view response((char *)data, len);
+        ESP_LOGI(TAG, "CIPSEND response %.*s", static_cast<int>(response.size()), response.data());
+        if (response.find("+CIPSEND:") != std::string::npos) {
+            return command_result::OK;
+        } else if (response.find("ERROR") != std::string::npos) {
+            return command_result::FAIL;
+        }
+        return command_result::TIMEOUT;
+    }, 50000);
+    return command_result::OK;
+//    size_t cmd_len = send.size();
+//    send.resize(cmd_len + len + 1);
+//    memcpy((char*)send.c_str() + cmd_len, data, len);
+//    *((char*)send.c_str() + cmd_len + 1) = '\x1A';
+//    return generic_command(t, send, "+CIPSEND:", "ERROR", 120000);
 }
 
-command_result tcp_recv(CommandableIf *t, uint8_t *data, size_t len)
+command_result tcp_recv(CommandableIf *t, uint8_t *data, size_t len, size_t &out_len)
 {
     ESP_LOGW(TAG, "%s", __func__ );
 //    auto ret = generic_command_common(t, "AT+CIPRXGET=1\n");
@@ -642,10 +656,43 @@ command_result tcp_recv(CommandableIf *t, uint8_t *data, size_t len)
         return command_result::FAIL;
     }
     ESP_LOGI(TAG, "size=%d", data_len);
-    ret = generic_get_string(t, "AT+CIPRXGET=3,0,100\r", out);
-    ESP_LOGI(TAG, "data=%s", out.data());
-    return command_result::OK;
+    if (data_len == 0) {
+        out_len = data_len;
+        return command_result::OK;
+    }
+    return t->command("AT+CIPRXGET=2,0,100\r", [&](uint8_t *cmd_data, size_t cmd_len) {
+        char pattern[] = "+CIPRXGET: 2,0,";
+        ESP_LOG_BUFFER_HEXDUMP(TAG, cmd_data, cmd_len, ESP_LOG_ERROR);
+        char* pos = strstr((char*)cmd_data, pattern);
+        if (pos == nullptr) {
+            return command_result::FAIL;
+        }
+        auto p1 = memchr(pos + sizeof(pattern) - 1, ',', 4);
+        if (p1 == nullptr)  {
+            return command_result::FAIL;
+        }
+        *(char*)p1 = '\0';
+        size_t actual_len = atoi(pos + sizeof(pattern) - 1);
+        ESP_LOGI(TAG, "actual len=%d", actual_len);
 
+        pos = strchr((char*)p1+1, '\n');
+        if (pos == nullptr) {
+            ESP_LOGE(TAG, "not found");
+            return command_result::FAIL;
+        }
+        if (actual_len > len) {
+            ESP_LOGE(TAG, "TOO BIG");
+            return command_result::FAIL;
+        }
+        out_len = actual_len;
+        memcpy(data, pos+1, actual_len);
+        pos = strstr((char*)pos+1+actual_len, "OK");
+        if (pos == nullptr) {
+            ESP_LOGE(TAG, "ok NOT FOUND");
+            return command_result::FAIL;
+        }
+        return command_result::OK;
+    }, 50000);
 }
 
 } // esp_modem::dce_commands

@@ -15,6 +15,7 @@
 #include "esp_modem_config.h"
 #include "cxx_include/esp_modem_api.hpp"
 #include <cxx_include/esp_modem_dce_factory.hpp>
+#include <lwip/sockets.h>
 #include "esp_log.h"
 
 #define BROKER_URL "mqtt://mqtt.eclipseprojects.io"
@@ -73,7 +74,7 @@ public:
     esp_modem::command_result tcp_open(const std::string& host, int port, int timeout) { return esp_modem::dce_commands::tcp_open(dte.get(), host, port, timeout); }
     esp_modem::command_result tcp_close() { return esp_modem::dce_commands::tcp_close(dte.get()); }
     esp_modem::command_result tcp_send(uint8_t *data, size_t len) { return esp_modem::dce_commands::tcp_send(dte.get(), data, len); }
-    esp_modem::command_result tcp_recv(uint8_t *data, size_t len) { return esp_modem::dce_commands::tcp_recv(dte.get(), data, len); }
+    esp_modem::command_result tcp_recv(uint8_t *data, size_t len, size_t &out_len) { return esp_modem::dce_commands::tcp_recv(dte.get(), data, len, out_len); }
 
 
 };
@@ -126,6 +127,7 @@ extern "C" void app_main(void)
 
     esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG(CONFIG_EXAMPLE_MODEM_PPP_APN);
     auto dce = LocalFactory::create(&dce_config, std::move(dte));
+#if 1
     dce->setup_data_mode();
     vTaskDelay(pdMS_TO_TICKS(1000));
     (dce->net_close());
@@ -153,13 +155,93 @@ extern "C" void app_main(void)
         ret = dce->at("AT+IPADDR", resp);
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
-    CHECK(dce->tcp_open("www.seznam.cz", 80, 50000));
+#endif
+    esp_mqtt_client_config_t mqtt_config = {};
+    mqtt_config.broker.address.uri = "mqtt://127.0.0.1";
+    esp_mqtt_client_handle_t mqtt_client = esp_mqtt_client_init(&mqtt_config);
+    esp_mqtt_client_register_event(mqtt_client, static_cast<esp_mqtt_event_id_t>(ESP_EVENT_ANY_ID), mqtt_event_handler, NULL);
+    int listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    if (listen_sock < 0) {
+        ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
+        return;
+    }
+    int opt = 1;
+    setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    ESP_LOGI(TAG, "Socket created");
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(1883);
+    inet_aton("127.0.0.1", &addr.sin_addr);
+
+    int err = bind(listen_sock, (struct sockaddr *)&addr, sizeof(addr));
+    if (err != 0) {
+        ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
+        return;
+    }
+    ESP_LOGI(TAG, "Socket bound, port %d", 1883);
+    err = listen(listen_sock, 1);
+    if (err != 0) {
+        ESP_LOGE(TAG, "Error occurred during listen: errno %d", errno);
+        return;
+    }
+
+
+    CHECK(dce->tcp_open("test.mosquitto.org", 1883, 50000));
+    esp_mqtt_client_start(mqtt_client);
+    struct sockaddr_in source_addr;
+    socklen_t addr_len = sizeof(source_addr);
+    int sock = accept(listen_sock, (struct sockaddr *)&source_addr, &addr_len);
+    if (sock < 0) {
+        ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
+        return;
+    }
+    ESP_LOGI(TAG, "Socket accepted");
+
+    while (1) {
+        uint8_t buf[100];
+        struct timeval tv = {
+                .tv_sec = 1,
+                .tv_usec = 0,
+        };
+        fd_set fdset;
+        FD_ZERO(&fdset);
+        FD_SET(sock, &fdset);
+        int s = select(sock + 1, &fdset, NULL, NULL, &tv);
+        if (s == 0) {
+            ESP_LOGI(TAG, "select timeout");
+            size_t actual_size = 0;
+            CHECK(dce->tcp_recv(buf, sizeof(buf), actual_size));
+            if (actual_size > 0) {
+                int len = ::send(sock, buf, actual_size, 0);
+                ESP_LOG_BUFFER_HEXDUMP(TAG, buf, actual_size, ESP_LOG_WARN);
+            }
+            continue;
+        } else if (s < 0) {
+            ESP_LOGI(TAG,  "select error %d", errno);
+            break;
+        }
+        if (FD_ISSET(sock, &fdset)) {
+            ESP_LOGI(TAG,  "select readset available");
+            int len = recv(sock, buf, sizeof(buf), 0);
+            if (len < 0) {
+                ESP_LOGI(TAG,  "read error %d", errno);
+                break;
+            } else if (len == 0) {
+                ESP_LOGI(TAG,  "EOF %d", errno);
+                break;
+            }
+            ESP_LOG_BUFFER_HEXDUMP(TAG, buf, len, ESP_LOG_INFO);
+            CHECK(dce->tcp_send((uint8_t *) buf, len));
+
+        }
+    }
     vTaskDelay(pdMS_TO_TICKS(1000));
     std::vector<uint8_t> data(100);
     std::string test = "test";
     CHECK(dce->tcp_send((uint8_t *) test.c_str(), test.size()));
     vTaskDelay(pdMS_TO_TICKS(1000));
-    CHECK(dce->tcp_recv((uint8_t *) test.c_str(), test.size()));
+    size_t actual_size = 0;
+    CHECK(dce->tcp_recv(&data[0], 100, actual_size));
     return;
 
 

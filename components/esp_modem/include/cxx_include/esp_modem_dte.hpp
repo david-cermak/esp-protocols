@@ -59,7 +59,7 @@ public:
      * @param len Data len to write
      * @return number of bytes written
      */
-    int write(uint8_t *data, size_t len);
+    int write(uint8_t *data, size_t len) override;
 
     /**
      * @brief Reading from the underlying terminal
