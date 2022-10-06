@@ -564,7 +564,20 @@ command_result set_gnss_power_mode_sim76xx(CommandableIf *t, int mode)
 command_result net_open(CommandableIf *t)
 {
     ESP_LOGW(TAG, "%s", __func__ );
-    return generic_command(t, "AT+NETOPEN\r", "+NETOPEN:", "ERROR", 30000);
+    std::string out;
+    auto ret = generic_get_string(t, "AT+NETOPEN?\r", out, 1000);
+    if (ret != command_result::OK) {
+        return ret;
+    }
+    ESP_LOGW(TAG, "%s", out.c_str() );
+    if (out.find("+NETOPEN: 1") != std::string::npos) {
+        ESP_LOGW(TAG, "Already there");
+        return command_result::OK;
+    } else if (out.find("+NETOPEN: 0") != std::string::npos) {
+        ESP_LOGW(TAG, "Need to setup");
+        return generic_command(t, "AT+NETOPEN\r", "+NETOPEN: 1", "ERROR", 120000);
+    }
+    return command_result::FAIL;
 }
 
 command_result net_close(CommandableIf *t)
@@ -612,20 +625,46 @@ command_result tcp_send(CommandableIf *t, uint8_t *data, size_t len)
     if (ret != command_result::OK) {
         return ret;
     }
+    ret = command_result::TIMEOUT;
+    ESP_LOGW(TAG, "Before setting...");
+    t->on_read([&ret](uint8_t *cmd_data, size_t cmd_len) {
+        std::string_view response((char *)cmd_data, cmd_len);
+        ESP_LOGW(TAG, "CIPSEND response %.*s", static_cast<int>(response.size()), response.data());
+
+        if (response.find("+CIPSEND:") != std::string::npos) {
+            ret = command_result::OK;
+        } else if (response.find("ERROR") != std::string::npos) {
+            ret = command_result::FAIL;
+        }
+        return ret;
+    });
+    ESP_LOGW(TAG, "Before writing...");
     auto written = t->write(data, len);
     if (written != len) {
+        ESP_LOGE(TAG, "written %d (%d)...", written, len);
         return command_result::FAIL;
     }
-    ret = t->command("", [&](uint8_t *data, size_t len) {
-        std::string_view response((char *)data, len);
-        ESP_LOGI(TAG, "CIPSEND response %.*s", static_cast<int>(response.size()), response.data());
-        if (response.find("+CIPSEND:") != std::string::npos) {
-            return command_result::OK;
-        } else if (response.find("ERROR") != std::string::npos) {
-            return command_result::FAIL;
-        }
-        return command_result::TIMEOUT;
-    }, 50000);
+    uint8_t ctrl_z = '\x1A';
+    t->write(&ctrl_z, 1);
+    int count = 0;
+    while (ret == command_result::TIMEOUT && count++ < 1000 ) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    t->on_read(nullptr);
+    return ret;
+//    return t->command("", [&](uint8_t *cmd_data, size_t cmd_len) {
+//        uint8_t ctrl_z = '\x1A';
+//        t->write(&ctrl_z, 1);
+//        std::string_view response((char *)cmd_data, cmd_len);
+//        ESP_LOGI(TAG, "CIPSEND response %.*s", static_cast<int>(response.size()), response.data());
+//        if (response.find("+CIPSEND:") != std::string::npos ||
+//            response.find("OK") != std::string::npos ) {
+//            return command_result::OK;
+//        } else if (response.find("ERROR") != std::string::npos) {
+//            return command_result::FAIL;
+//        }
+//        return command_result::TIMEOUT;
+//    }, 50000);
     return command_result::OK;
 //    size_t cmd_len = send.size();
 //    send.resize(cmd_len + len + 1);
@@ -649,6 +688,7 @@ command_result tcp_recv(CommandableIf *t, uint8_t *data, size_t len, size_t &out
     }
     constexpr std::string_view pattern = "+CIPRXGET: 4,0,";
     if (out.find(pattern) == std::string::npos) {
+
         return command_result::FAIL;
     }
     size_t data_len;

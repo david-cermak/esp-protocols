@@ -75,6 +75,8 @@ public:
      */
     void set_read_cb(std::function<bool(uint8_t *data, size_t len)> f);
 
+    void on_read(got_line_cb on_data) override;
+
     /**
      * @brief Sets DTE error callback
      * @param f Function to be called on DTE error

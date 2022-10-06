@@ -128,11 +128,12 @@ extern "C" void app_main(void)
     esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG(CONFIG_EXAMPLE_MODEM_PPP_APN);
     auto dce = LocalFactory::create(&dce_config, std::move(dte));
 #if 1
-    dce->setup_data_mode();
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    (dce->net_close());
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    (dce->net_open());
+    while (dce->setup_data_mode() != true) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+//    (dce->net_close());
+//    vTaskDelay(pdMS_TO_TICKS(1000));
+    CHECK(dce->net_open());
     vTaskDelay(pdMS_TO_TICKS(1000));
     (dce->tcp_close());
     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -158,6 +159,7 @@ extern "C" void app_main(void)
 #endif
     esp_mqtt_client_config_t mqtt_config = {};
     mqtt_config.broker.address.uri = "mqtt://127.0.0.1";
+    mqtt_config.session.message_retransmit_timeout = 10000;
     esp_mqtt_client_handle_t mqtt_client = esp_mqtt_client_init(&mqtt_config);
     esp_mqtt_client_register_event(mqtt_client, static_cast<esp_mqtt_event_id_t>(ESP_EVENT_ANY_ID), mqtt_event_handler, NULL);
     int listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
@@ -186,7 +188,7 @@ extern "C" void app_main(void)
     }
 
 
-    CHECK(dce->tcp_open("test.mosquitto.org", 1883, 50000));
+    CHECK(dce->tcp_open("test.mosquitto.org", 1883, 120000));
     esp_mqtt_client_start(mqtt_client);
     struct sockaddr_in source_addr;
     socklen_t addr_len = sizeof(source_addr);
@@ -200,12 +202,13 @@ extern "C" void app_main(void)
     while (1) {
         uint8_t buf[100];
         struct timeval tv = {
-                .tv_sec = 1,
-                .tv_usec = 0,
+                .tv_sec = 0,
+                .tv_usec = 500000,
         };
         fd_set fdset;
         FD_ZERO(&fdset);
         FD_SET(sock, &fdset);
+        ESP_LOGI(TAG, "BEFORE SELECT");
         int s = select(sock + 1, &fdset, NULL, NULL, &tv);
         if (s == 0) {
             ESP_LOGI(TAG, "select timeout");
@@ -213,6 +216,13 @@ extern "C" void app_main(void)
             CHECK(dce->tcp_recv(buf, sizeof(buf), actual_size));
             if (actual_size > 0) {
                 int len = ::send(sock, buf, actual_size, 0);
+                if (len < 0) {
+                    ESP_LOGE(TAG,  "write error %d", errno);
+                    break;
+                } else if (len == 0) {
+                    ESP_LOGE(TAG,  "EOF %d", errno);
+                    break;
+                }
                 ESP_LOG_BUFFER_HEXDUMP(TAG, buf, actual_size, ESP_LOG_WARN);
             }
             continue;
@@ -224,10 +234,10 @@ extern "C" void app_main(void)
             ESP_LOGI(TAG,  "select readset available");
             int len = recv(sock, buf, sizeof(buf), 0);
             if (len < 0) {
-                ESP_LOGI(TAG,  "read error %d", errno);
+                ESP_LOGE(TAG,  "read error %d", errno);
                 break;
             } else if (len == 0) {
-                ESP_LOGI(TAG,  "EOF %d", errno);
+                ESP_LOGE(TAG,  "EOF %d", errno);
                 break;
             }
             ESP_LOG_BUFFER_HEXDUMP(TAG, buf, len, ESP_LOG_INFO);

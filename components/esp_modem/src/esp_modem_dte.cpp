@@ -175,6 +175,35 @@ int DTE::write(uint8_t *data, size_t len)
     return data_term->write(data, len);
 }
 
+void DTE::on_read(got_line_cb on_read_cb)
+{
+    if (on_read_cb == nullptr) {
+        command_term->set_read_cb(nullptr);
+        internal_lock.unlock();
+        return;
+    }
+    internal_lock.lock();
+    buffer.consumed = 0;
+    command_result res = command_result::TIMEOUT;
+    command_term->set_read_cb([&](uint8_t *data, size_t len) {
+        printf("set_read_cb %p %d\n", data, len);
+        if (!data) {
+            data = buffer.get();
+            len = command_term->read(data + buffer.consumed, buffer.size - buffer.consumed);
+        } else {
+            buffer.consumed = 0; // if the underlying terminal contains data, we cannot fragment
+        }
+        res = on_read_cb(data, buffer.consumed + len);
+        if (res == command_result::OK || res == command_result::FAIL) {
+            command_term->set_read_cb(nullptr);
+            internal_lock.unlock();
+            return true;
+        }
+        buffer.consumed += len;
+        return false;
+    });
+}
+
 /**
  * Implemented here to keep all headers C++11 compliant
  */
