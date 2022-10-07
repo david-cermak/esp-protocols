@@ -20,7 +20,7 @@ menu "Example Configuration"
                 SIM7600 is Multi-Band LTE-TDD/LTE-FDD/HSPA+ and GSM/GPRS/EDGE module
     endchoice
 
-    config EXAMPLE_MODEM_PPP_APN
+    config EXAMPLE_MODEM_APN
         string "Set MODEM APN"
         default "internet"
         help

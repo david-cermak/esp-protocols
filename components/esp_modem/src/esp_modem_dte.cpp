@@ -180,29 +180,20 @@ void DTE::on_read(got_line_cb on_read_cb)
     if (on_read_cb == nullptr) {
         command_term->set_read_cb(nullptr);
         internal_lock.unlock();
-        printf("callback removed\n");
-
         return;
     }
     internal_lock.lock();
-    buffer.consumed = 0;
     command_term->set_read_cb([this, on_read_cb](uint8_t *data, size_t len) {
-        printf("set_read_cb %p %d\n", data, len);
         if (!data) {
             data = buffer.get();
-            len = command_term->read(data + buffer.consumed, buffer.size - buffer.consumed);
-        } else {
-            buffer.consumed = 0; // if the underlying terminal contains data, we cannot fragment
+            len = command_term->read(data, buffer.size);
         }
-        printf("on_read_cb %d\n", on_read_cb == nullptr);
-        auto res = on_read_cb(data, buffer.consumed + len);
+        auto res = on_read_cb(data, len);
         if (res == command_result::OK || res == command_result::FAIL) {
             command_term->set_read_cb(nullptr);
             internal_lock.unlock();
-            printf("callback removed\n");
             return true;
         }
-//        buffer.consumed += len;
         return false;
     });
 }

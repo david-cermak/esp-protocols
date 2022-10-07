@@ -31,6 +31,14 @@ namespace dce_commands {
  */
 
 /**
+ * @brief Make some generic AT commands and getters public
+ */
+command_result generic_get_string(CommandableIf *t, const std::string &command, std::string_view &output, uint32_t timeout_ms = 500);
+command_result generic_command(CommandableIf *t, const std::string &command,
+                               const std::string &pass_phrase,
+                               const std::string &fail_phrase, uint32_t timeout_ms);
+
+/**
  * @brief Declaration of all commands is generated from esp_modem_command_declare.inc
  */
 #define ESP_MODEM_DECLARE_DCE_COMMAND(name, return_type, num, ...) \
@@ -50,15 +58,6 @@ command_result power_down_sim70xx(CommandableIf *t);
 command_result set_network_bands_sim76xx(CommandableIf *t, const std::string& mode, const int* bands, int size);
 command_result power_down_sim8xx(CommandableIf *t);
 command_result set_data_mode_sim8xx(CommandableIf *t);
-
-command_result net_open(CommandableIf *t);
-command_result net_close(CommandableIf *t);
-command_result tcp_open(CommandableIf *t, const std::string& host, int port, int timeout);
-command_result tcp_close(CommandableIf *t);
-command_result tcp_send(CommandableIf *t, uint8_t *data, size_t len);
-command_result tcp_recv(CommandableIf *t, uint8_t *data, size_t len, size_t &out_len);
-
-
 
 /**
  * @}
