@@ -3,7 +3,7 @@ name: Check pre-commit rules
 on:
   push:
     branches:
-      - master
+      - test/branch
   pull_request:
     types: [opened, reopened, synchronize]
 
