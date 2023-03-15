@@ -17,6 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Fetch head and base refs
+        if: ${{ github.event.pull_request.number }}
         # This is necessary for pre-commit to check the changes in the PR branch
         run: |
           git fetch origin ${{ github.base_ref }}:base_ref
