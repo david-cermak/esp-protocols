@@ -21,6 +21,7 @@
 #include "cxx_include/esp_modem_dte.hpp"
 #include "esp_modem_config.h"
 #include "cxx_include/esp_modem_api.hpp"
+#include "../private_include/uart_terminal.hpp"
 #if defined(CONFIG_EXAMPLE_SERIAL_CONFIG_USB)
 #include "esp_modem_usb_config.h"
 #include "cxx_include/esp_modem_usb_api.hpp"
@@ -191,6 +192,8 @@ extern "C" void app_main(void)
 #endif
 
     assert(dce != nullptr);
+
+    ESP_ERROR_CHECK(set_uart_term_flow_control(uart_dte.get(), ESP_MODEM_FLOW_CONTROL_HW));
 
     if (dte_config.uart_config.flow_control == ESP_MODEM_FLOW_CONTROL_HW) {
         if (command_result::OK != dce->set_flow_control(2, 2)) {

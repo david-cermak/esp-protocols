@@ -67,6 +67,7 @@ public:
         ESP_MODEM_THROW_IF_FALSE(signal.wait(TASK_PARAMS, 1000), "Failed to set UART task params");
         on_read = std::move(f);
     }
+    esp_err_t set_flow_control(esp_modem_flow_ctrl_t flow_control);
 
 private:
     static void s_task(void *task_param)
@@ -106,6 +107,15 @@ std::unique_ptr<Terminal> create_uart_terminal(const esp_modem_dte_config *confi
         term->start();
         return term;
     )
+}
+
+esp_err_t set_uart_term_flow_control(DTE *dte, esp_modem_flow_ctrl_t flow_control)
+{
+    auto term = dte->detach_term();
+    auto uart = static_cast<UartTerminal *>(term.get());
+    auto res = uart->set_flow_control(flow_control);
+    dte->attach_term(term);
+    return res;
 }
 
 void UartTerminal::task()
@@ -182,6 +192,19 @@ int UartTerminal::read(uint8_t *data, size_t len)
 int UartTerminal::write(uint8_t *data, size_t len)
 {
     return uart_write_bytes_compat(uart.port, data, len);
+}
+
+esp_err_t UartTerminal::set_flow_control(esp_modem_flow_ctrl_t flow_control)
+{
+    switch (flow_control) {
+    case ESP_MODEM_FLOW_CONTROL_HW:
+        return uart_set_hw_flow_ctrl(uart.port, UART_HW_FLOWCTRL_CTS_RTS, UART_FIFO_LEN - 8);
+    case ESP_MODEM_FLOW_CONTROL_NONE:
+        return uart_set_sw_flow_ctrl(uart.port, true, 8, UART_FIFO_LEN - 8);
+    case ESP_MODEM_FLOW_CONTROL_SW:
+        return uart_set_hw_flow_ctrl(uart.port, UART_HW_FLOWCTRL_DISABLE, 0);
+    }
+    return ESP_FAIL;
 }
 
 } // namespace esp_modem

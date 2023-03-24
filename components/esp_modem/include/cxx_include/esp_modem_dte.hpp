@@ -108,6 +108,18 @@ public:
      */
     command_result command(const std::string &command, got_line_cb got_line, uint32_t time_ms, char separator) override;
 
+    std::shared_ptr<Terminal> detach_term()
+    {
+        internal_lock.lock();
+        return std::move(primary_term);
+    }
+
+    void attach_term(std::shared_ptr<Terminal> term)
+    {
+        primary_term = std::move(term);
+        internal_lock.unlock();
+    }
+
 protected:
     /**
      * @brief Allows for locking the DTE
