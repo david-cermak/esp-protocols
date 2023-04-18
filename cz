@@ -1,0 +1,5 @@
+echo "Checkin' which component to bump..."
+if git show -s | grep mdns; then
+cd components/mdns
+cz "$@"
+fi
