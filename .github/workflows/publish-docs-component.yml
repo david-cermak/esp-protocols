@@ -28,12 +28,9 @@ jobs:
         uses: commitizen-tools/commitizen-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          changelog_increment_filename: body.md
           increment: PATCH
       - name: Print Version
-        run: |
-            echo "Bumped to version ${{ steps.cz.outputs.version }}"
-            cat body.md
+        run: echo "Bumped to version ${{ steps.cz.outputs.version }}"
 
   docs_build:
     name: Docs-Build-And-Upload
