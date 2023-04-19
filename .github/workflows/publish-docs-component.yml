@@ -34,6 +34,7 @@ jobs:
         if: env.BUMP_VERSION != ''
         uses: softprops/action-gh-release@v1
         with:
+          body_path: "release_notes.md"
           tag_name: ${{ env.BUMP_TAG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
