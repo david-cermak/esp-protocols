@@ -8,9 +8,9 @@ if ! git show -s | grep -q '@bot bump '; then
 fi
 
 echo "Checking all components:"
-for comp in asio modem websocket mdns mqtt_cxx; do
+for comp in  mdns; do
     BUMP_CMD=`git show -s | grep "@bot bump ${comp}"` || true
-    if [ ! -z "${BUMP_CMD}" ]; then
+    if [ true ]; then
         BUMP_ARGS=${BUMP_CMD##*bump ${comp} }
         echo "Bumping version number of component ${comp} (${BUMP_ARGS})"
         git config --global --add safe.directory "*"
