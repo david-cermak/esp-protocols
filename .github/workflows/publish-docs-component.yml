@@ -5,13 +5,6 @@ on:
     branches:
       - master
 
-env:
-  DOCS_DEPLOY_URL_BASE: ${{ secrets.DOCS_DEPLOY_URL_BASE }}
-  DOCS_DEPLOY_SERVER: ${{ secrets.DOCS_DEPLOY_SERVER }}
-  DOCS_DEPLOY_SERVER_USER: ${{ secrets.DOCS_DEPLOY_SERVER_USER }}
-  DOCS_DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_PRIVATEKEY }}
-  DOCS_DEPLOY_PATH : ${{ secrets.DOCS_DEPLOY_PATH }}
-
 jobs:
   bump_version:
     if: "!startsWith(github.event.head_commit.message, 'bump')"
@@ -29,49 +22,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: ./ci/bump
+      - name: tag merge commit
+        if: env.BUMP_VERSION != ''
+        uses: anothrNick/github-tag-action@1.61.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CUSTOM_TAG: ${{ env.BUMP_TAG }}
       - name: Release
-        if: env.CURRENT_TAG != ''
+        if: env.BUMP_VERSION != ''
         uses: softprops/action-gh-release@v1
         with:
-          body_path: "release_notes.md"
-          tag_name: ${{ env.CURRENT_TAG }}
+          tag_name: ${{ env.BUMP_TAG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  docs_build:
-    name: Docs-Build-And-Upload
-    needs: bump_version
-    runs-on: ubuntu-latest
-    # Skip running on forks since it won't have access to secrets
-    if: github.repository == 'espressif/esp-protocols'
-    steps:
-      - name: Checkout esp-protocols
-        uses: actions/checkout@master
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-          submodules: recursive
-      - name: Generate docs
-        shell: bash
-        run: |
-            sudo apt-get update
-            sudo apt-get -y install doxygen clang python3-pip
-            python -m pip install breathe recommonmark esp-docs==1.4.1
-            cd $GITHUB_WORKSPACE/docs
-            ./generate_docs
-      - name: Deploying generated docs
-        if: always()
-        shell: bash
-        run: |
-            source $GITHUB_WORKSPACE/docs/utils.sh
-            add_doc_server_ssh_keys $DOCS_DEPLOY_KEY $DOCS_DEPLOY_SERVER $DOCS_DEPLOY_SERVER_USER
-            export GIT_VER=$(git describe --always)
-            export GITHUB_REF_NAME=latest
-            export DOCS_BUILD_DIR=$GITHUB_WORKSPACE/docs
-            deploy-docs
-      - name: Upload components to component service
-        uses: espressif/github-actions/upload_components@master
-        with:
-          directories: "components/esp_modem;components/esp_websocket_client;components/mdns;components/asio;components/esp_mqtt_cxx"
-          namespace: "espressif"
-          api_token: ${{ secrets.IDF_COMPONENT_API_TOKEN }}
