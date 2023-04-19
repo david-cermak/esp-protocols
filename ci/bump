@@ -2,36 +2,35 @@
 
 set -e
 
-if ! git show -s | grep -q '@bot bump '; then
-    echo "@bot: No bump command in the current (merge) commit, not updating..."
+if ! git show -s | grep -q '^Merge'; then
+    echo "Not a merge commit"
     exit 0;
 fi
 
-echo "Checking all components:"
-for comp in asio modem websocket mdns mqtt_cxx; do
-    BUMP_CMD=`git show -s | grep "@bot bump ${comp}"` || true
-    if [ ! -z "${BUMP_CMD}" ]; then
-        BUMP_ARGS=${BUMP_CMD##*bump ${comp} }
-        echo "Bumping version number of component ${comp} (${BUMP_ARGS})"
-        git config --global --add safe.directory "*"
-        git config --local user.name "github-actions[bot]"
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local pull.rebase true
+for comp in  `ls components`; do
+if git log -1 -m --name-only --pretty="" | grep -q components/${comp}/idf_component.yml; then 
+    version=`grep version: components/${comp}/.cz.yaml`
+    echo $version
+    version=${version#*version: }
+    echo $version
 
-        pip install commitizen sh
+    tag_format=`grep tag_format: components/${comp}/.cz.yaml`
+    echo $tag_format
+    tag_format=${tag_format:#*tag_format: }
+    echo $tag_format
 
-        cd components/${comp}
-        cz bump ${BUMP_ARGS}
+    eval tag=$tag_format
+    echo $tag
 
-        CURRENT_TAG=`git describe --exact-match --tags`
-        echo "CURRENT_TAG=${CURRENT_TAG}" >> "$GITHUB_ENV"
+    echo "BUMP_VERSION=${version}"
+    echo "BUMP_COMPONENT=${comp}"
+    echo "BUMP_TAG=${tag}"
 
-        GITHUB_DOMAIN=${GITHUB_SERVER_URL#*//}
-        CURRENT_BRANCH="$(git branch --show-current)"
-        REPO="https://${GITHUB_ACTOR}:${GITHUB_TOKEN}@${GITHUB_DOMAIN}/${GITHUB_REPOSITORY}.git"
-        git pull "$REPO" "$CURRENT_BRANCH"
-        git push "$REPO" "HEAD:${CURRENT_BRANCH}" --tags
-        echo "component ${comp} updated to ${CURRENT_TAG}"
-        exit 0
-    fi
+    echo "BUMP_VERSION=${version}" >> "$GITHUB_ENV"
+    echo "BUMP_COMPONENT=${comp}" >> "$GITHUB_ENV"
+    echo "BUMP_TAG=${tag}" >> "$GITHUB_ENV"
+
+    exit 0;
+fi
 done
+echo "No changes in component version file"
