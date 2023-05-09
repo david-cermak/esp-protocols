@@ -59,7 +59,7 @@ jobs:
             export DOCS_BUILD_DIR=$GITHUB_WORKSPACE/docs/${{ env.BUMP_COMPONENT }}
             export DOCS_DEPLOY_PATH=$DOCS_DEPLOY_PATH/${{ env.BUMP_COMPONENT }}
             cd $GITHUB_WORKSPACE/docs/${{ env.BUMP_COMPONENT }}
-            ls docs/generic/html/
+            ls
             # Deploy docs with latest path
             deploy-docs
             # Deploy docs with version path
