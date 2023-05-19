@@ -12,6 +12,7 @@
    CONDITIONS OF ANY KIND, either express or implied.
 */
 #include <string>
+#include <esp_transport_tcp.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "esp_netif.h"
@@ -38,7 +39,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        msg_id = esp_mqtt_client_subscribe(client, "/topic/esp-pppos", 0);
+        msg_id = esp_mqtt_client_subscribe_single(client, "/topic/esp-pppos", 0);
         ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
         break;
     case MQTT_EVENT_DISCONNECTED:
@@ -68,6 +69,70 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "MQTT other event id: %d", event->event_id);
         break;
     }
+}
+
+static int tcp_connect(esp_transport_handle_t t, const char *host, int port, int timeout_ms)
+{
+    ESP_LOGI(TAG, "host=%s", host);
+    auto *dce = (sock_dce::DCE *)esp_transport_get_context_data(t);
+//    if (dce->tcp_open(host, port, timeout_ms) == esp_modem::command_result::OK) {
+//        return 1;
+//    }
+//    return -1;
+    if (!dce->start(host, port)) {
+        return -1;
+    }
+    ESP_LOGI(TAG, "Waiting for connection...");
+    if (dce->wait_to_idle(timeout_ms)) {
+        dce->set_idle();
+        return 1;
+    }
+    return -1;
+}
+
+static int tcp_read(esp_transport_handle_t t, char *buffer, int len, int timeout_ms)
+{
+    auto *dce = (sock_dce::DCE *)esp_transport_get_context_data(t);
+    auto ret = dce->wait_to_read(timeout_ms);
+    if (ret > 0) {
+        return dce->sync_recv(buffer, len, timeout_ms);
+    }
+    return ret;
+
+}
+
+static int tcp_write(esp_transport_handle_t t, const char *buffer, int len, int timeout_ms)
+{
+
+    auto *dce = (sock_dce::DCE *)esp_transport_get_context_data(t);
+    return dce->sync_send(buffer, len, timeout_ms);
+
+}
+
+static int base_close(esp_transport_handle_t t)
+{
+    auto *dce = (sock_dce::DCE *)esp_transport_get_context_data(t);
+    return dce->tcp_close() == esp_modem::command_result::OK ? 0 : -1;
+}
+
+static int base_poll_read(esp_transport_handle_t t, int timeout_ms)
+{
+    auto *dce = (sock_dce::DCE *)esp_transport_get_context_data(t);
+    return dce->wait_to_read(timeout_ms);
+}
+
+static int base_poll_write(esp_transport_handle_t t, int timeout_ms)
+{
+//    auto *dce = (sock_dce::DCE *)esp_transport_get_context_data(t);
+//    if (!dce->wait_to_idle(timeout_ms)) {
+//        return 0;
+//    }
+    return 1;
+}
+
+static int base_destroy(esp_transport_handle_t transport)
+{
+    return 0;
 }
 
 extern "C" void app_main(void)
@@ -106,11 +171,17 @@ extern "C" void app_main(void)
         return;
     }
 
-    dce->init_sock(8883);
+    dce->init_sock(1883);
     esp_mqtt_client_config_t mqtt_config = {};
+    esp_transport_handle_t at = esp_transport_init();
+    esp_transport_set_context_data(at, (void *)dce.get());
+    esp_transport_set_func(at, tcp_connect, tcp_read, tcp_write, base_close, base_poll_read, base_poll_write, base_destroy);
+    ESP_LOGE(TAG, "at handle=%p", at);
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-    mqtt_config.broker.address.uri = "mqtts://127.0.0.1";
+    mqtt_config.broker.address.uri = "mqtt://test.mosquitto.org";
+    mqtt_config.broker.address.port = 1883;
     mqtt_config.session.message_retransmit_timeout = 10000;
+    mqtt_config.network.transport = at;
 #else
     mqtt_config.uri = "mqtt://127.0.0.1";
     mqtt_config.message_retransmit_timeout = 10000;
@@ -118,23 +189,24 @@ extern "C" void app_main(void)
     esp_mqtt_client_handle_t mqtt_client = esp_mqtt_client_init(&mqtt_config);
     esp_mqtt_client_register_event(mqtt_client, static_cast<esp_mqtt_event_id_t>(ESP_EVENT_ANY_ID), mqtt_event_handler, NULL);
     esp_mqtt_client_start(mqtt_client);
-    if (!dce->start(BROKER_URL, 8883)) {
-        ESP_LOGE(TAG, "Failed to start DCE");
-        return;
-    }
+//    if (!dce->start(BROKER_URL, 1883)) {
+//        ESP_LOGE(TAG, "Failed to start DCE");
+//        return;
+//    }
     while (1) {
-        while (dce->perform_sock()) {
-            ESP_LOGV(TAG, "...performing");
-        }
-        ESP_LOGE(TAG, "Loop exit.. retrying");
+//        while (dce->perform_sock()) {
+//            ESP_LOGV(TAG, "...performing");
+//        }
+//        ESP_LOGE(TAG, "Loop exit.. retrying");
+        vTaskDelay(pdMS_TO_TICKS(5000));
         // handle disconnections errors
-        if (!dce->init_network()) {
-            ESP_LOGE(TAG, "Failed to reinit network");
-            return;
-        }
-        if (!dce->start("test.mosquitto.org", 1883)) {
-            ESP_LOGI(TAG, "Network reinitialized, retrying");
-        }
+//        if (!dce->init_network()) {
+//            ESP_LOGE(TAG, "Failed to reinit network");
+//            return;
+//        }
+//        if (!dce->start("test.mosquitto.org", 1883)) {
+//            ESP_LOGI(TAG, "Network reinitialized, retrying");
+//        }
     }
 
 }

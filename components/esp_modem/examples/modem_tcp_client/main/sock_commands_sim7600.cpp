@@ -246,26 +246,40 @@ Responder::ret Responder::recv(uint8_t *data, size_t len)
             ESP_LOGE(TAG, "TOO BIG");
             return ret::FAIL;
         }
-        size_t total_len = 0;
+        total_len = 0;
         if (std::from_chars(next_comma + 1, next_nl - 1, total_len).ec == std::errc::invalid_argument) {
             ESP_LOGE(TAG, "cannot convert");
             return ret::FAIL;
         }
+        ESP_LOGI(TAG, "total_len=%d", total_len);
         read_again = (total_len > 0);
         recv_data = next_nl + 1;
         auto first_data_len = len - (recv_data - (char *)data) /* minus size of the command marker */;
         if (actual_len > first_data_len) {
-            ::send(sock, recv_data, first_data_len, 0);
+//            ::send(sock, recv_data, first_data_len, 0);
+            ::memcpy(&buffer[read_offset], recv_data, first_data_len);
+            read_offset += first_data_len;
+            actual_read += first_data_len;
             data_to_recv = actual_len - first_data_len;
             return ret::NEED_MORE_DATA;
         }
-        ::send(sock, recv_data, actual_len, 0);
+//        ::send(sock, recv_data, actual_len, 0);
+        ::memcpy(&buffer[read_offset], recv_data, actual_len);
+        read_offset += actual_len;
+        actual_read += actual_len;
+
     } else if (data_to_recv > len) {    // continue sending
-        ::send(sock, recv_data, len, 0);
+//        ::send(sock, recv_data, len, 0);
+        ::memcpy(&buffer[read_offset], recv_data, len);
+        read_offset += len;
+        actual_read += len;
         data_to_recv -= len;
         return ret::NEED_MORE_DATA;
     } else if (data_to_recv <= len) {    // last read -> looking for "OK" marker
-        ::send(sock, recv_data, data_to_recv, 0);
+//        ::send(sock, recv_data, data_to_recv, 0);
+        ::memcpy(&buffer[read_offset], recv_data, data_to_recv);
+        read_offset += data_to_recv;
+        actual_read += data_to_recv;
         actual_len = data_to_recv;
     }
 
@@ -347,6 +361,7 @@ Responder::ret Responder::check_async_replies(status state, std::string_view &re
     if (response.find("+CIPRXGET: 1") != std::string::npos) {
         uint64_t data_ready = 1;
         write(data_ready_fd, &data_ready, sizeof(data_ready));
+        total_len = 1;
         ESP_LOGD(TAG, "Got data on modem!");
     }
     if (state == status::SENDING) {
