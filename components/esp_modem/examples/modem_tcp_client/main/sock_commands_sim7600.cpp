@@ -196,11 +196,16 @@ void Responder::start_sending(size_t len)
 {
     data_to_send = len;
     send_stat = 0;
+//    std::string str("AT+CIPSEND=0," + std::to_string(len)+ "\n");
+//    ESP_LOGW("send", "%s", str.c_str());
     send_cmd("AT+CIPSEND=0," + std::to_string(len) + "\r");
 }
 
 void Responder::start_receiving(size_t len)
 {
+    std::string str("AT+CIPSEND=0," + std::to_string(len) + "\n");
+    ESP_LOGW("recv", "%s", str.c_str());
+
     send_cmd("AT+CIPRXGET=2,0," + std::to_string(len) + "\r");
 }
 
@@ -209,6 +214,8 @@ bool Responder::start_connecting(std::string host, int port)
     send_cmd(R"(AT+CIPOPEN=0,"TCP",")" + host + "\"," + std::to_string(port) + "\r");
     return true;
 }
+
+#include "esp_debug_helpers.h"
 
 Responder::ret Responder::recv(uint8_t *data, size_t len)
 {
@@ -219,7 +226,12 @@ Responder::ret Responder::recv(uint8_t *data, size_t len)
         static constexpr std::string_view head = "+CIPRXGET: 2,0,";
         auto head_pos = std::search(recv_data, recv_data + len, head.begin(), head.end());
         if (head_pos == nullptr) {
+            ESP_LOGE(TAG, "LINE %d", __LINE__);
             return ret::FAIL;
+        } else {
+//            ESP_LOG_BUFFER_HEXDUMP(TAG, recv_data, len, ESP_LOG_WARN);
+//            ESP_LOG_BUFFER_HEXDUMP(TAG, head.begin(), head.end() - head.begin(), ESP_LOG_ERROR);
+
         }
 
         if (head_pos - (char *)data > MIN_MESSAGE) {
@@ -230,6 +242,7 @@ Responder::ret Responder::recv(uint8_t *data, size_t len)
 
         auto next_comma = (char *)memchr(head_pos + head.size(), ',', MIN_MESSAGE);
         if (next_comma == nullptr)  {
+            ESP_LOGE(TAG, "LINE %d", __LINE__);
             return ret::FAIL;
         }
         if (std::from_chars(head_pos + head.size(), next_comma, actual_len).ec == std::errc::invalid_argument) {
@@ -289,6 +302,7 @@ Responder::ret Responder::recv(uint8_t *data, size_t len)
         last_pos = (char *)memchr(recv_data + 1 + actual_len, 'O', MIN_MESSAGE);
         if (last_pos == nullptr || last_pos[1] != 'K') {
             data_to_recv = 0;
+            ESP_LOGE(TAG, "LINE %d", __LINE__);
             return ret::FAIL;
         }
     }
@@ -331,6 +345,7 @@ Responder::ret Responder::send(std::string_view response)
     if (send_stat == 1) {
         if (response.find("+CIPSEND:") != std::string::npos) {
             send_stat = 0;
+            ESP_LOGI(TAG, "sent!");
             return ret::OK;
         }
         if (response.find("ERROR") != std::string::npos) {
@@ -361,7 +376,7 @@ Responder::ret Responder::check_async_replies(status state, std::string_view &re
     if (response.find("+CIPRXGET: 1") != std::string::npos) {
         uint64_t data_ready = 1;
         write(data_ready_fd, &data_ready, sizeof(data_ready));
-        total_len = 1;
+//        total_len = 1;
         ESP_LOGD(TAG, "Got data on modem!");
     }
     if (state == status::SENDING) {

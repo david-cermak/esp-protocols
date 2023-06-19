@@ -58,9 +58,14 @@ public:
         return actual_read;
     }
 
-    bool has_data()
+    size_t has_data()
     {
-        return total_len > 0;
+        return total_len;
+    }
+
+    void set_has_data()
+    {
+        total_len = 1;
     }
 private:
     static constexpr size_t buffer_size = 512;
@@ -113,6 +118,7 @@ esp_modem::return_type name(__VA_ARGS__);
     {
         if (!signal.wait(IDLE, ms)) {
             ESP_LOGE("dce", "Failed to get idle");
+            ESP_LOGE("dce", "State %d", state);
             return false;
         }
         if (state != status::IDLE) {
@@ -127,13 +133,21 @@ esp_modem::return_type name(__VA_ARGS__);
 
     int sync_recv(char *buffer, int len, int timeout_ms)
     {
+//        if (at.has_data() == 0) {
+//            return 0;
+//        }
+        ESP_LOGI("sync-recv", "before");
         if (!wait_to_idle(timeout_ms)) {
             return 0;
         }
+        ESP_LOGI("sync-recv", "after");
+//        at.start_receiving(at.get_buf_len());
         at.clear_offsets();
         state = status::RECEIVING;
-//        at.start_receiving(at.get_buf_len());
-        at.start_receiving(len);
+        uint64_t data;
+        read(data_ready_fd, &data, sizeof(data));
+        int max_len = std::min(len, (int)at.get_buf_len());
+        at.start_receiving(max_len);
         if (!signal.wait(IDLE, 500 + timeout_ms)) {
             return 0;
         }
@@ -166,7 +180,7 @@ esp_modem::return_type name(__VA_ARGS__);
         memcpy(at.get_buf(), buffer, len_to_send);
         ESP_LOG_BUFFER_HEXDUMP("dce", at.get_buf(), len, ESP_LOG_INFO);
         at.start_sending(len_to_send);
-        if (!signal.wait(IDLE, timeout_ms)) {
+        if (!signal.wait(IDLE, timeout_ms + 1000)) {
             return -1;
         }
         set_idle();
@@ -175,7 +189,11 @@ esp_modem::return_type name(__VA_ARGS__);
 
     int wait_to_read(uint32_t ms)
     {
-        if (at.has_data()) {
+        if (at.has_data() > 0) {
+//            uint64_t data;
+//            read(data_ready_fd, &data, sizeof(data));
+
+            ESP_LOGE("dce",  "HAS data: %d", at.has_data());
             return 1;
         }
 //        return 0;
@@ -195,9 +213,12 @@ esp_modem::return_type name(__VA_ARGS__);
             return -1;
         }
         if (FD_ISSET(data_ready_fd, &fdset)) {
-            uint64_t data;
-            read(data_ready_fd, &data, sizeof(data));
-            ESP_LOGD("dce", "select read: modem data available %x", data);
+//            uint64_t data;
+//            read(data_ready_fd, &data, sizeof(data));
+            ESP_LOGD("dce", "select read: modem data available");
+//            if (at.has_data() == 0) {
+//                at.set_has_data();
+//            }
             return 1;
         }
         return -1;

@@ -22,8 +22,11 @@
 #include "cxx_include/esp_modem_api.hpp"
 #include "sock_dce.hpp"
 #include "esp_log.h"
+#include "esp_transport_tcp.h"
 
 #define BROKER_URL "mqtt.eclipseprojects.io"
+
+esp_transport_handle_t esp_transport_tls_init(esp_transport_handle_t parent);
 
 static const char *TAG = "modem_client";
 static EventGroupHandle_t event_group = NULL;
@@ -39,7 +42,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        msg_id = esp_mqtt_client_subscribe_single(client, "/topic/esp-pppos", 0);
+        msg_id = esp_mqtt_client_subscribe(client, "/topic/esp-pppos", 0);
         ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
         break;
     case MQTT_EVENT_DISCONNECTED:
@@ -93,7 +96,7 @@ static int tcp_connect(esp_transport_handle_t t, const char *host, int port, int
 static int tcp_read(esp_transport_handle_t t, char *buffer, int len, int timeout_ms)
 {
     auto *dce = (sock_dce::DCE *)esp_transport_get_context_data(t);
-    auto ret = dce->wait_to_read(timeout_ms);
+    auto ret = dce->wait_to_read(0);
     if (ret > 0) {
         return dce->sync_recv(buffer, len, timeout_ms);
     }
@@ -147,8 +150,8 @@ extern "C" void app_main(void)
     /* Configure and create the UART DTE */
     esp_modem_dte_config_t dte_config = ESP_MODEM_DTE_DEFAULT_CONFIG();
     /* setup UART specific configuration based on kconfig options */
-    dte_config.uart_config.tx_io_num = CONFIG_EXAMPLE_MODEM_UART_TX_PIN;
-    dte_config.uart_config.rx_io_num = CONFIG_EXAMPLE_MODEM_UART_RX_PIN;
+    dte_config.uart_config.tx_io_num = 25;
+    dte_config.uart_config.rx_io_num = 26;
     dte_config.uart_config.rts_io_num = CONFIG_EXAMPLE_MODEM_UART_RTS_PIN;
     dte_config.uart_config.cts_io_num = CONFIG_EXAMPLE_MODEM_UART_CTS_PIN;
     dte_config.uart_config.rx_buffer_size = CONFIG_EXAMPLE_MODEM_UART_RX_BUFFER_SIZE;
@@ -171,17 +174,20 @@ extern "C" void app_main(void)
         return;
     }
 
-    dce->init_sock(1883);
+    dce->init_sock(8883);
     esp_mqtt_client_config_t mqtt_config = {};
     esp_transport_handle_t at = esp_transport_init();
     esp_transport_set_context_data(at, (void *)dce.get());
     esp_transport_set_func(at, tcp_connect, tcp_read, tcp_write, base_close, base_poll_read, base_poll_write, base_destroy);
+    esp_transport_handle_t ssl = esp_transport_tls_init(at);
     ESP_LOGE(TAG, "at handle=%p", at);
+    ESP_LOGE(TAG, "ssl handle=%p", ssl);
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-    mqtt_config.broker.address.uri = "mqtt://test.mosquitto.org";
-    mqtt_config.broker.address.port = 1883;
+//    mqtt_config.broker.address.uri = "mqtt://test.mosquitto.org";
+    mqtt_config.broker.address.uri = "mqtt://mqtt.eclipseprojects.io";
+    mqtt_config.broker.address.port = 8883;
     mqtt_config.session.message_retransmit_timeout = 10000;
-    mqtt_config.network.transport = at;
+    mqtt_config.network.transport = ssl;
 #else
     mqtt_config.uri = "mqtt://127.0.0.1";
     mqtt_config.message_retransmit_timeout = 10000;
