@@ -137,8 +137,11 @@ private:
     command_result result;                                  /*!< Command result of the currently exectuted command */
     std::function<bool(uint8_t *data, size_t len)> on_data; /*!< on data callback for current terminal */
     struct extra {
+        extra(): buffer(nullptr) {}
         std::vector<uint8_t> data{0};
+        std::vector<uint8_t> *buffer;
         size_t consumed{0};
+        void grow(size_t need_size);
     } extra;
     void grow(size_t need_size)
     {
@@ -146,6 +149,11 @@ private:
             extra.data.resize(need_size);
         }
     }
+    void set_cb();
+//    bool on_term_recv(uint8_t *data, size_t len);
+    got_line_cb line_cb;
+    Lock got_line_lock{};
+//    std::shared_ptr<SignalGroup> shared_signal;
 };
 
 /**

@@ -17,26 +17,129 @@ static const size_t dte_default_buffer_size = 1000;
 DTE::DTE(const esp_modem_dte_config *config, std::unique_ptr<Terminal> terminal):
     buffer(config->dte_buffer_size),
     cmux_term(nullptr), primary_term(std::move(terminal)), secondary_term(primary_term),
-    mode(modem_mode::UNDEF) {}
+    mode(modem_mode::UNDEF)
+{
+    set_cb();
+}
 
 DTE::DTE(std::unique_ptr<Terminal> terminal):
     buffer(dte_default_buffer_size),
     cmux_term(nullptr), primary_term(std::move(terminal)), secondary_term(primary_term),
-    mode(modem_mode::UNDEF) {}
+    mode(modem_mode::UNDEF)
+{
+    set_cb();
+}
 
 DTE::DTE(const esp_modem_dte_config *config, std::unique_ptr<Terminal> t, std::unique_ptr<Terminal> s):
     buffer(config->dte_buffer_size),
     cmux_term(nullptr), primary_term(std::move(t)), secondary_term(std::move(s)),
-    mode(modem_mode::DUAL_MODE) {}
+    mode(modem_mode::UNDEF)
+{
+    set_cb();
+}
 
 DTE::DTE(std::unique_ptr<Terminal> t, std::unique_ptr<Terminal> s):
     buffer(dte_default_buffer_size),
     cmux_term(nullptr), primary_term(std::move(t)), secondary_term(std::move(s)),
-    mode(modem_mode::DUAL_MODE) {}
+    mode(modem_mode::UNDEF)
+{
+    set_cb();
+}
+
+void DTE::set_cb()
+{
+    primary_term->set_read_cb([this](uint8_t *data, size_t len) {
+        Scoped<Lock> l(got_line_lock);
+        if (line_cb == nullptr) {
+            return false;
+        }
+        if (data) {
+            if (extra.consumed != 0) {
+                grow(extra.consumed + len);
+                ::memcpy(&extra.data[0] + extra.consumed, data, len);
+                data = &extra.data[0];
+            }
+            if (memchr(data + extra.consumed, '\n', len)) {
+                result = line_cb(data, extra.consumed + len);
+                if (result == command_result::OK || result == command_result::FAIL) {
+                    signal.set(GOT_LINE);
+                    return true;
+                }
+            }
+            if (extra.consumed == 0) {
+                grow(len);
+                ::memcpy(&extra.data[0], data, len);
+            }
+            extra.consumed += len;
+            return false;
+        }
+        data = buffer.get();
+        int remaining = ((int) buffer.size) - ((int) buffer.consumed);
+        ESP_LOGE("dte", "size=%d len=%d remaining=%d consumed=%d", buffer.size, len, remaining, buffer.consumed);
+        if (remaining > 0) {
+            len = primary_term->read(data + buffer.consumed, buffer.size - buffer.consumed);
+        } else {
+            if (extra.consumed == 0) {
+                grow(buffer.size + len);
+                ::memcpy(&extra.data[0], buffer.get(), buffer.size);
+                extra.consumed = buffer.size;
+            } else {
+                grow(extra.consumed + len);
+            }
+            data = &extra.data[0];
+            len = primary_term->read(data + extra.consumed, extra.data.size() - extra.consumed);
+            if (memchr(data + extra.consumed, '\n', len)) {
+                result = line_cb(data, extra.consumed + len);
+                if (result == command_result::OK || result == command_result::FAIL) {
+                    signal.set(GOT_LINE);
+                    return true;
+                }
+            }
+            extra.consumed += len;
+            return false;
+        }
+        if (memchr(data + buffer.consumed, '\n', len)) {
+            result = line_cb(data, buffer.consumed + len);
+            if (result == command_result::OK || result == command_result::FAIL) {
+                signal.set(GOT_LINE);
+                return true;
+            }
+        }
+        buffer.consumed += len;
+        return false;
+//        std::weak_ptr<SignalGroup> weak_signal = shared_signal;
+//
+//        got_line_cb line_cb = got_line;
+//        return on_term_recv(data, len);
+    });
+}
 
 command_result DTE::command(const std::string &command, got_line_cb got_line, uint32_t time_ms, const char separator)
 {
-    Scoped<Lock> l(internal_lock);
+    Scoped<Lock> l1(internal_lock);
+    {
+        Scoped<Lock> l2(got_line_lock);
+        line_cb = got_line;
+    }
+    primary_term->write((uint8_t *)command.c_str(), command.length());
+    auto got_lf = signal.wait(GOT_LINE, time_ms);
+    if (got_lf && result == command_result::TIMEOUT) {
+        ESP_MODEM_THROW_IF_ERROR(ESP_ERR_INVALID_STATE);
+    }
+    {
+        Scoped<Lock> l2(got_line_lock);
+        line_cb = nullptr;
+        buffer.consumed = 0;
+        if (extra.consumed) {
+            printf("\n%.*s\n", extra.data.size(), &extra.data[0]);
+        }
+        extra.consumed = 0;
+    }
+
+    return result;
+
+    signal.set(GOT_LINE);
+
     result = command_result::TIMEOUT;
     signal.clear(GOT_LINE);
     primary_term->set_read_cb([this, got_line, separator](uint8_t *data, size_t len) {
@@ -115,13 +218,15 @@ command_result DTE::command(const std::string &command, got_line_cb got_line, ui
         return false;
     });
     primary_term->write((uint8_t *)command.c_str(), command.length());
-    auto got_lf = signal.wait(GOT_LINE, time_ms);
-    if (got_lf && result == command_result::TIMEOUT) {
+    auto got_lf2 = signal.wait(GOT_LINE, time_ms);
+    if (got_lf2 && result == command_result::TIMEOUT) {
         ESP_MODEM_THROW_IF_ERROR(ESP_ERR_INVALID_STATE);
     }
     signal.set(GOT_LINE);
     primary_term->set_read_cb(nullptr);
-    printf("\n%.*s\n", extra.data.size(), &extra.data[0]);
+    if (extra.consumed) {
+        printf("\n%.*s\n", extra.data.size(), &extra.data[0]);
+    }
     buffer.consumed = 0;
     extra.consumed = 0;
     return result;
@@ -142,6 +247,7 @@ bool DTE::exit_cmux()
     primary_term = std::move(ejected.first);
     buffer = std::move(ejected.second);
     secondary_term = primary_term;
+    set_cb();
     return true;
 }
 
@@ -159,6 +265,7 @@ bool DTE::setup_cmux()
         return false;
     }
     secondary_term = std::make_unique<CMuxInstance>(cmux_term, 1);
+    set_cb();
     return true;
 }
 
@@ -230,6 +337,10 @@ bool DTE::set_mode(modem_mode m)
 
 void DTE::set_read_cb(std::function<bool(uint8_t *, size_t)> f)
 {
+    if (f == nullptr) {
+        set_cb();
+        return;
+    }
     on_data = std::move(f);
     secondary_term->set_read_cb([this](uint8_t *data, size_t len) {
         if (!data) { // if no data available from terminal callback -> need to explicitly read some
@@ -296,3 +407,15 @@ void DTE::on_read(got_line_cb on_read_cb)
  */
 unique_buffer::unique_buffer(size_t size):
     data(std::make_unique<uint8_t[]>(size)), size(size), consumed(0) {}
+
+void DTE::extra::grow(size_t need_size)
+{
+    if (need_size == 0) {
+        delete buffer;
+        buffer = nullptr;
+    } else if (buffer == nullptr) {
+        buffer = new std::vector<uint8_t>(need_size);
+    } else {
+        buffer->resize(need_size);
+    }
+}

@@ -114,7 +114,7 @@ std::unique_ptr<Terminal> create_uart_terminal(const esp_modem_dte_config *confi
 void UartTerminal::task()
 {
     uart_event_t event;
-    std::function<bool(uint8_t *data, size_t len)> local_on_read = nullptr;
+//    std::function<bool(uint8_t *data, size_t len)> local_on_read = nullptr;
     size_t len;
     task_id = Task::GetID();
     signal.set(TASK_INIT);
@@ -129,9 +129,9 @@ void UartTerminal::task()
             switch (event.type) {
             case UART_DATA:
                 uart_get_buffered_data_len(uart.port, &len);
-                local_on_read = on_read;
-                if (len && local_on_read) {
-                    local_on_read(nullptr, len);
+//                local_on_read = on_read;
+                if (len && on_read) {
+                    on_read(nullptr, len);
                 }
                 break;
             case UART_FIFO_OVF:
