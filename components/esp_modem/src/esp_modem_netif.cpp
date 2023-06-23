@@ -65,6 +65,8 @@ esp_err_t Netif::esp_modem_post_attach(esp_netif_t *esp_netif, void *args)
 
 void Netif::receive(uint8_t *data, size_t len)
 {
+    ESP_LOG_BUFFER_HEXDUMP("Netif::receive", data, len, ESP_LOG_INFO);
+    vTaskDelay(pdMS_TO_TICKS(10));
     if (signal.is_any(PPP_STARTED)) {
         esp_netif_receive(driver.base.netif, data, len, nullptr);
     }
@@ -89,8 +91,8 @@ void Netif::start()
         receive(data, len);
         return true;
     });
-    esp_netif_action_start(driver.base.netif, nullptr, 0, nullptr);
     signal.set(PPP_STARTED);
+    esp_netif_action_start(driver.base.netif, nullptr, 0, nullptr);
 }
 
 void Netif::stop()

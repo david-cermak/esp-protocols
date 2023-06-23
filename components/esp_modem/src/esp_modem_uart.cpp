@@ -64,7 +64,9 @@ public:
 
     void set_read_cb(std::function<bool(uint8_t *data, size_t len)> f) override
     {
-        ESP_MODEM_THROW_IF_FALSE(signal.wait(TASK_PARAMS, 1000), "Failed to set UART task params");
+        if (task_id == 0 || Task::GetID() != task_id) {
+            ESP_MODEM_THROW_IF_FALSE(signal.wait(TASK_PARAMS, 1000), "Failed to set UART task params");
+        }
         on_read = std::move(f);
     }
 
@@ -97,6 +99,7 @@ private:
     uart_resource uart;
     SignalGroup signal;
     uart_task task_handle;
+    intptr_t task_id;
 };
 
 std::unique_ptr<Terminal> create_uart_terminal(const esp_modem_dte_config *config)
@@ -111,7 +114,9 @@ std::unique_ptr<Terminal> create_uart_terminal(const esp_modem_dte_config *confi
 void UartTerminal::task()
 {
     uart_event_t event;
+    std::function<bool(uint8_t *data, size_t len)> local_on_read = nullptr;
     size_t len;
+    task_id = Task::GetID();
     signal.set(TASK_INIT);
     signal.wait_any(TASK_START | TASK_STOP, portMAX_DELAY);
     if (signal.is_any(TASK_STOP)) {
@@ -124,8 +129,9 @@ void UartTerminal::task()
             switch (event.type) {
             case UART_DATA:
                 uart_get_buffered_data_len(uart.port, &len);
-                if (len && on_read) {
-                    on_read(nullptr, len);
+                local_on_read = on_read;
+                if (len && local_on_read) {
+                    local_on_read(nullptr, len);
                 }
                 break;
             case UART_FIFO_OVF:

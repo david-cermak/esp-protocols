@@ -40,16 +40,74 @@ command_result DTE::command(const std::string &command, got_line_cb got_line, ui
     result = command_result::TIMEOUT;
     signal.clear(GOT_LINE);
     primary_term->set_read_cb([this, got_line, separator](uint8_t *data, size_t len) {
+        if (signal.is_any(GOT_LINE)) {
+            return false;
+        }
+//        if (data)
+//        {
+//            if (memchr(data, separator, len)) {
+//                result = got_line(data, len);
+//                if (result == command_result::OK || result == command_result::FAIL) {
+//                    signal.set(GOT_LINE);
+//                    primary_term->set_read_cb(nullptr);
+//                    return true;
+//                }
+//            }
+//            return false;
+//        }
         if (!data) {
             data = buffer.get();
-            len = primary_term->read(data + buffer.consumed, buffer.size - buffer.consumed);
+            int remaining = ((int)buffer.size) - ((int)buffer.consumed);
+            ESP_LOGE("dte", "size=%d len=%d remaining=%d consumed=%d", buffer.size, len, remaining, buffer.consumed);
+            if (remaining > 0) {
+                len = primary_term->read(data + buffer.consumed, buffer.size - buffer.consumed);
+            } else {
+                if (extra.consumed == 0) {
+                    grow(buffer.size + len);
+                    ::memcpy(&extra.data[0], buffer.get(), buffer.size);
+                    extra.consumed = buffer.size;
+                } else {
+                    grow(extra.consumed + len);
+                }
+                data = &extra.data[0];
+                len = primary_term->read(data + extra.consumed, extra.data.size() - extra.consumed);
+                if (memchr(data + extra.consumed, separator, len)) {
+                    result = got_line(data, extra.consumed + len);
+                    if (result == command_result::OK || result == command_result::FAIL) {
+                        signal.set(GOT_LINE);
+                        primary_term->set_read_cb(nullptr);
+                        return true;
+                    }
+                }
+                extra.consumed += len;
+                return false;
+            }
         } else {
-            buffer.consumed = 0; // if the underlying terminal contains data, we cannot fragment
+            if (extra.consumed != 0) {
+                grow(extra.consumed + len);
+                ::memcpy(&extra.data[0] + extra.consumed, data, len);
+                data = &extra.data[0];
+            }
+            if (memchr(data + extra.consumed, separator, len)) {
+                result = got_line(data, extra.consumed + len);
+                if (result == command_result::OK || result == command_result::FAIL) {
+                    signal.set(GOT_LINE);
+                    primary_term->set_read_cb(nullptr);
+                    return true;
+                }
+            }
+            if (extra.consumed == 0) {
+                grow(len);
+                ::memcpy(&extra.data[0], data, len);
+            }
+            extra.consumed += len;
+            return false;
         }
         if (memchr(data + buffer.consumed, separator, len)) {
             result = got_line(data, buffer.consumed + len);
             if (result == command_result::OK || result == command_result::FAIL) {
                 signal.set(GOT_LINE);
+                primary_term->set_read_cb(nullptr);
                 return true;
             }
         }
@@ -61,8 +119,11 @@ command_result DTE::command(const std::string &command, got_line_cb got_line, ui
     if (got_lf && result == command_result::TIMEOUT) {
         ESP_MODEM_THROW_IF_ERROR(ESP_ERR_INVALID_STATE);
     }
-    buffer.consumed = 0;
+    signal.set(GOT_LINE);
     primary_term->set_read_cb(nullptr);
+    printf("\n%.*s\n", extra.data.size(), &extra.data[0]);
+    buffer.consumed = 0;
+    extra.consumed = 0;
     return result;
 }
 

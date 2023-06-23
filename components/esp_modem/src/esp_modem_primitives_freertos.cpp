@@ -103,4 +103,10 @@ void Task::Delay(uint32_t ms)
     vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
+intptr_t Task::GetID()
+{
+    return reinterpret_cast<intptr_t>(xTaskGetCurrentTaskHandle());
+
+}
+
 } // namespace esp_modem

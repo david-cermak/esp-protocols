@@ -21,7 +21,8 @@ static bool exit_data(DTE &dte, ModuleIf &device, Netif &netif)
     netif.stop();
     auto signal = std::make_shared<SignalGroup>();
     std::weak_ptr<SignalGroup> weak_signal = signal;
-    dte.set_read_cb([weak_signal](uint8_t *data, size_t len) -> bool {
+    dte.set_read_cb([&netif, weak_signal](uint8_t *data, size_t len) -> bool {
+        netif.receive(data, len);
         if (memchr(data, '\n', len))
         {
             ESP_LOG_BUFFER_HEXDUMP("esp-modem: debug_data", data, len, ESP_LOG_DEBUG);

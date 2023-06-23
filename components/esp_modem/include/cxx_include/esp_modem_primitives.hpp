@@ -66,6 +66,7 @@ public:
     explicit Task(size_t stack_size, size_t priority, void *task_param, TaskFunction_t task_function);
     ~Task();
 
+    static intptr_t GetID();
     static void Delete();
     static void Relinquish();
     static void Delay(uint32_t delay);

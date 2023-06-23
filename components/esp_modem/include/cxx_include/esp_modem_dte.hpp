@@ -136,6 +136,16 @@ private:
     SignalGroup signal;                                     /*!< Event group used to signal request-response operations */
     command_result result;                                  /*!< Command result of the currently exectuted command */
     std::function<bool(uint8_t *data, size_t len)> on_data; /*!< on data callback for current terminal */
+    struct extra {
+        std::vector<uint8_t> data{0};
+        size_t consumed{0};
+    } extra;
+    void grow(size_t need_size)
+    {
+        if (extra.data.size() < need_size) {
+            extra.data.resize(need_size);
+        }
+    }
 };
 
 /**
