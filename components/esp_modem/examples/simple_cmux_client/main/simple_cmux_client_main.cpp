@@ -26,6 +26,7 @@
 #include "esp_https_ota.h"      // For potential OTA configuration
 #include "vfs_resource/vfs_create.hpp"
 #include "SIM7070_gnss.hpp"
+#include <esp_netif_ppp.h>
 
 #if defined(CONFIG_EXAMPLE_FLOW_CONTROL_NONE)
 #define EXAMPLE_FLOW_CONTROL ESP_MODEM_FLOW_CONTROL_NONE
@@ -115,9 +116,14 @@ private:
     ip_event_t ip_event_type;
 };
 
+void ota_example_task(void *pvParameter);
 
 extern "C" void app_main(void)
 {
+    esp_log_level_set("*", ESP_LOG_INFO);
+//    esp_log_level_set("HTTP_CLIENT", ESP_LOG_DEBUG);
+//    esp_log_level_set("pppd_test", ESP_LOG_DEBUG);
+
     /* Init and register system/core components */
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_ERROR_CHECK(esp_netif_init());
@@ -125,6 +131,7 @@ extern "C" void app_main(void)
     /* Configure and create the DTE */
     esp_modem_dte_config_t dte_config = ESP_MODEM_DTE_DEFAULT_CONFIG();
     /* setup UART specific configuration based on kconfig options */
+    dte_config.task_priority = 15;
     dte_config.uart_config.tx_io_num = CONFIG_EXAMPLE_MODEM_UART_TX_PIN;
     dte_config.uart_config.rx_io_num = CONFIG_EXAMPLE_MODEM_UART_RX_PIN;
     dte_config.uart_config.rts_io_num = CONFIG_EXAMPLE_MODEM_UART_RTS_PIN;
@@ -149,6 +156,7 @@ extern "C" void app_main(void)
 
     /* Configure the DCE */
     esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG(CONFIG_EXAMPLE_MODEM_PPP_APN);
+//    esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG("internet");
 
     /* Configure the PPP netif */
     esp_netif_config_t netif_ppp_config = ESP_NETIF_DEFAULT_PPP();
@@ -197,7 +205,11 @@ extern "C" void app_main(void)
     }
 #endif
 
-    if (dce->set_mode(esp_modem::modem_mode::CMUX_MODE)) {
+    if (dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_MODE) &&
+        dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_SWAP) &&
+        dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_DATA))
+    {
+//    if (dce->set_mode(esp_modem::modem_mode::DATA_MODE)) {
         std::cout << "Modem has correctly entered multiplexed command/data mode" << std::endl;
     } else {
         ESP_LOGE(TAG, "Failed to configure multiplexed command mode... exiting");
@@ -205,12 +217,12 @@ extern "C" void app_main(void)
     }
 
     /* Read some data from the modem */
-    std::string str;
-    while (dce->get_operator_name(str) != esp_modem::command_result::OK) {
-        // Getting operator name could fail... retry after 500 ms
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
-    std::cout << "Operator name:" << str << std::endl;
+//    std::string str;
+//    while (dce->get_operator_name(str) != esp_modem::command_result::OK) {
+//        // Getting operator name could fail... retry after 500 ms
+//        vTaskDelay(pdMS_TO_TICKS(500));
+//    }
+//    std::cout << "Operator name:" << str << std::endl;
 
 #if CONFIG_EXAMPLE_MODEM_DEVICE_SIM7070_GNSS == 1
     if (dce->set_gnss_power_mode(1) == esp_modem::command_result::OK) {
@@ -248,9 +260,9 @@ extern "C" void app_main(void)
     }
 
     /* Again reading some data from the modem */
-    if (dce->get_imsi(str) == esp_modem::command_result::OK) {
-        std::cout << "Modem IMSI number:" << str << std::endl;
-    }
+//    if (dce->get_imsi(str) == esp_modem::command_result::OK) {
+//        std::cout << "Modem IMSI number:" << str << std::endl;
+//    }
 
 
 #if CONFIG_EXAMPLE_MODEM_DEVICE_SIM7070_GNSS == 1
@@ -290,11 +302,44 @@ extern "C" void app_main(void)
 
 
 #if CONFIG_EXAMPLE_PERFORM_OTA == 1
+
     esp_http_client_config_t config = { };
     config.skip_cert_common_name_check = true;
     config.url = CONFIG_EXAMPLE_PERFORM_OTA_URI;
+    config.keep_alive_enable = true;
+//    config.timeout_ms = 30000;
+    config.save_client_session = true;
 
-    esp_err_t ret = esp_https_ota(&config);
+
+    esp_netif_ppp_config_t cfg;
+    ESP_ERROR_CHECK(esp_netif_ppp_get_params(esp_netif, &cfg));
+//    cfg.ppp_lcp_echo_disabled = 1;
+    ESP_ERROR_CHECK(esp_netif_ppp_set_params(esp_netif, &cfg));
+    ESP_LOGE(TAG, "waiting...");
+    vTaskDelay(pdMS_TO_TICKS(10000));
+    ESP_LOGE(TAG, "disabling lcp...");
+    if (!dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_COMMAND)) {
+        ESP_LOGE(TAG, "Failed to setup!");
+    }
+    if (dce->hang_up() != esp_modem::command_result::OK) {
+        ESP_LOGE(TAG, "Hangup command failed!");
+    }
+//    ESP_ERROR_CHECK(esp_netif_disable_lcp(esp_netif));
+//    vTaskDelay(pdMS_TO_TICKS(10000));
+    if (!dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_DATA)) {
+        ESP_LOGE(TAG, "Failed to setup cmux again");
+    }
+    ESP_LOGE(TAG, "disabled...");
+    vTaskDelay(pdMS_TO_TICKS(10000));
+    ESP_LOGE(TAG, "conitnue...");
+    xTaskCreate(&ota_example_task, "ota_example_task", 8192, dce.get(), 5, NULL);
+
+    vTaskDelay(portMAX_DELAY);
+
+    esp_https_ota_config_t ota_config = { };
+    ota_config.http_config = &config;
+
+    esp_err_t ret = esp_https_ota(&ota_config);
     if (ret == ESP_OK) {
         esp_restart();
     } else {
