@@ -6,6 +6,7 @@
 #pragma once
 
 #include <utility>
+#include <memory>
 #include <span>
 #include "mbedtls/ssl.h"
 #include "mbedtls/entropy.h"
@@ -22,6 +23,7 @@ public:
     Tls();
     virtual ~Tls();
     bool init(is_server server, do_verify verify);
+    bool deinit();
     int handshake();
     int write(const unsigned char *buf, size_t len);
     int read(unsigned char *buf, size_t len);
@@ -39,7 +41,13 @@ protected:
     mbedtls_ssl_config conf_{};
     mbedtls_ctr_drbg_context ctr_drbg_{};
     mbedtls_entropy_context entropy_{};
+    std::unique_ptr<mbedtls_ssl_session> session_{nullptr};
     virtual void delay() {}
+
+    bool set_session();
+    bool get_session();
+    void reset_session();
+    bool is_session_loaded();
 
 private:
     static void print_error(const char *function, int error_code);
