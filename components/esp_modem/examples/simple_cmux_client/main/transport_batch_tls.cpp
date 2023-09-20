@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2023 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Unlicense OR CC0-1.0
+ */
 //
 // Created by david on 9/18/23.
 //
@@ -30,7 +35,7 @@ private:
         static int destroy(esp_transport_handle_t t);
     };
     int last_timeout;
-    std::array<char, 64*1024> buf;
+    std::array<char, 64 * 1024> buf;
     size_t read_len;
     size_t offset;
 };
@@ -57,7 +62,7 @@ int TlsTransport::recv(unsigned char *buffer, size_t len)
     if (read_len != 0) {
 
         if (read_len > len) {
-            memcpy((char*)buffer, buf.data() + offset, len);
+            memcpy((char *)buffer, buf.data() + offset, len);
             read_len -= len;
             offset += len;
             ESP_LOGD(TAG, "read %d from batch read_len = %d", len, read_len);
@@ -65,7 +70,7 @@ int TlsTransport::recv(unsigned char *buffer, size_t len)
         } else {
             int remaining = len = read_len;
             if (remaining > 0) {
-                memcpy((char*)buffer, buf.data() + offset, remaining);
+                memcpy((char *)buffer, buf.data() + offset, remaining);
                 read_len = 0;
                 offset = 0;
                 return remaining;
@@ -111,9 +116,20 @@ int TlsTransport::transport::connect(esp_transport_handle_t t, const char *host,
     ESP_LOGI(TAG, "TLS-connect");
     auto ret = tls->connect(host, port, timeout_ms);
     if (ret < 0) {
+        ESP_LOGI(TAG, "Failed to connect to transport");
         return ret;
     }
-    return tls->handshake();
+    if (tls->is_session_loaded()) {
+        tls->set_session();
+    }
+    ret = tls->handshake();
+    if (ret < 0) {
+        ESP_LOGI(TAG, "Failed to handshake");
+        return ret;
+    }
+    tls->get_session();
+    ESP_LOGI(TAG, "AFTER TLS-connect");
+    return 0;
 }
 
 int TlsTransport::transport::read(esp_transport_handle_t t, char *buffer, int len, int timeout_ms)

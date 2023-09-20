@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2023 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Unlicense OR CC0-1.0
+ */
 #include <string.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
@@ -48,7 +53,7 @@ static void infinite_loop(void)
 {
     int i = 0;
     ESP_LOGI(TAG, "When a new firmware is available on the server, press the reset button to download it");
-    while(1) {
+    while (1) {
         ESP_LOGI(TAG, "Waiting for a new firmware ... %d", ++i);
         vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
@@ -59,7 +64,7 @@ const int max_http_request_size = BUFFSIZE;
 
 void ota_example_task(void *pvParameter)
 {
-    esp_modem::DCE* dce = (esp_modem::DCE*)pvParameter;
+    esp_modem::DCE *dce = (esp_modem::DCE *)pvParameter;
     esp_transport_handle_t tcp = esp_transport_tcp_init();
     esp_transport_handle_t ssl = esp_transport_batch_tls_init(tcp);
 //    esp_log_level_set("batch-tls", ESP_LOG_VERBOSE);
@@ -84,11 +89,11 @@ void ota_example_task(void *pvParameter)
 
     if (configured != running) {
         ESP_LOGW(TAG, "Configured OTA boot partition at offset 0x%08" PRIx32 ", but running from offset 0x%08" PRIx32,
-                configured->address, running->address);
+                 configured->address, running->address);
         ESP_LOGW(TAG, "(This can happen if either the OTA boot data or preferred boot image become corrupted somehow.)");
     }
     ESP_LOGI(TAG, "Running partition type %d subtype %d (offset 0x%08" PRIx32 ")",
-            running->type, running->subtype, running->address);
+             running->type, running->subtype, running->address);
 
 //    esp_http_client_config_t config = {
 //            .url = "https://192.168.11.1:1234/blink.bin",
@@ -145,8 +150,8 @@ void ota_example_task(void *pvParameter)
 
     update_partition = esp_ota_get_next_update_partition(NULL);
     assert(update_partition != NULL);
-    ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%" PRIx32 ,
-            update_partition->subtype, update_partition->address);
+    ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%" PRIx32,
+             update_partition->subtype, update_partition->address);
 
 //    while (1) {
 //        int data_read = esp_http_client_read(client, ota_write_data, BUFFSIZE);
@@ -172,14 +177,14 @@ void ota_example_task(void *pvParameter)
 //    ESP_LOGE(TAG, "DONE");
 //    task_fatal_error();
 
-            int binary_file_length = 0;
+    int binary_file_length = 0;
     /*deal with all receive packet*/
     bool image_header_was_checked = false;
 
     int err_count = 0;
     while (1) {
-        dce->recover();
-        vTaskDelay(pdMS_TO_TICKS(50));
+//        dce->recover();
+//        vTaskDelay(pdMS_TO_TICKS(50));
         err = esp_http_client_open(client, 0);
         if (err != ESP_OK) {
             esp_http_client_close(client);
@@ -219,7 +224,7 @@ void ota_example_task(void *pvParameter)
             }
             task_fatal_error();
         }
-    esp_http_client_fetch_headers(client);
+        esp_http_client_fetch_headers(client);
 
         int batch_len = esp_transport_batch_tls_pre_read(ssl, BUFFSIZE, 2000);
         if (batch_len < 0) {
@@ -251,7 +256,7 @@ void ota_example_task(void *pvParameter)
                         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
                     }
 
-                    const esp_partition_t* last_invalid_app = esp_ota_get_last_invalid_partition();
+                    const esp_partition_t *last_invalid_app = esp_ota_get_last_invalid_partition();
                     esp_app_desc_t invalid_app_info;
                     if (esp_ota_get_partition_description(last_invalid_app, &invalid_app_info) == ESP_OK) {
                         ESP_LOGI(TAG, "Last invalid firmware version: %s", invalid_app_info.version);

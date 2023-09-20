@@ -130,6 +130,7 @@ extern "C" void app_main(void)
 
     /* Configure and create the DTE */
     esp_modem_dte_config_t dte_config = ESP_MODEM_DTE_DEFAULT_CONFIG();
+//    dte_config.dte_buffer_size = 4096;
     /* setup UART specific configuration based on kconfig options */
     dte_config.task_priority = 15;
     dte_config.uart_config.tx_io_num = CONFIG_EXAMPLE_MODEM_UART_TX_PIN;
@@ -154,6 +155,10 @@ extern "C" void app_main(void)
 #endif // CONFIG_EXAMPLE_USE_VFS_TERM
     assert(dte);
 
+    dte->set_error_cb([](terminal_error err) {
+        ESP_LOGE(TAG, "Error from DTE!!!");
+        ESP_LOGE(TAG, "%d", (int)err);
+    });
     /* Configure the DCE */
     esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG(CONFIG_EXAMPLE_MODEM_PPP_APN);
 //    esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG("internet");
@@ -205,10 +210,18 @@ extern "C" void app_main(void)
     }
 #endif
 
-    if (dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_MODE) &&
-        dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_SWAP) &&
-        dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_DATA))
     {
+        esp_netif_ppp_config_t cfg;
+        ESP_ERROR_CHECK(esp_netif_ppp_get_params(esp_netif, &cfg));
+        cfg.ppp_lcp_echo_disabled = 1;
+        ESP_ERROR_CHECK(esp_netif_ppp_set_params(esp_netif, &cfg));
+
+    }
+
+
+    if (dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_MODE) &&
+            dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_SWAP) &&
+            dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_DATA)) {
 //    if (dce->set_mode(esp_modem::modem_mode::DATA_MODE)) {
         std::cout << "Modem has correctly entered multiplexed command/data mode" << std::endl;
     } else {
@@ -307,33 +320,43 @@ extern "C" void app_main(void)
     config.skip_cert_common_name_check = true;
     config.url = CONFIG_EXAMPLE_PERFORM_OTA_URI;
     config.keep_alive_enable = true;
-//    config.timeout_ms = 30000;
+    config.timeout_ms = 30000;
     config.save_client_session = true;
 
 
     esp_netif_ppp_config_t cfg;
-    ESP_ERROR_CHECK(esp_netif_ppp_get_params(esp_netif, &cfg));
-//    cfg.ppp_lcp_echo_disabled = 1;
-    ESP_ERROR_CHECK(esp_netif_ppp_set_params(esp_netif, &cfg));
-    ESP_LOGE(TAG, "waiting...");
-    vTaskDelay(pdMS_TO_TICKS(10000));
-    ESP_LOGE(TAG, "disabling lcp...");
-    if (!dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_COMMAND)) {
-        ESP_LOGE(TAG, "Failed to setup!");
-    }
-    if (dce->hang_up() != esp_modem::command_result::OK) {
-        ESP_LOGE(TAG, "Hangup command failed!");
-    }
-//    ESP_ERROR_CHECK(esp_netif_disable_lcp(esp_netif));
+//    ESP_ERROR_CHECK(esp_netif_ppp_get_params(esp_netif, &cfg));
+////    cfg.ppp_lcp_echo_disabled = 1;
+//    ESP_ERROR_CHECK(esp_netif_ppp_set_params(esp_netif, &cfg));
+//    ESP_LOGE(TAG, "waiting...");
 //    vTaskDelay(pdMS_TO_TICKS(10000));
-    if (!dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_DATA)) {
-        ESP_LOGE(TAG, "Failed to setup cmux again");
-    }
-    ESP_LOGE(TAG, "disabled...");
-    vTaskDelay(pdMS_TO_TICKS(10000));
-    ESP_LOGE(TAG, "conitnue...");
+//    ESP_LOGE(TAG, "disabling lcp...");
+//    if (!dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_COMMAND)) {
+//        ESP_LOGE(TAG, "Failed to setup!");
+//    }
+//    if (dce->hang_up() != esp_modem::command_result::OK) {
+//        ESP_LOGE(TAG, "Hangup command failed!");
+//    }
+////    ESP_ERROR_CHECK(esp_netif_disable_lcp(esp_netif));
+////    vTaskDelay(pdMS_TO_TICKS(10000));
+//    if (!dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_DATA)) {
+//        ESP_LOGE(TAG, "Failed to setup cmux again");
+//    }
+//    ESP_LOGE(TAG, "disabled...");
+//    vTaskDelay(pdMS_TO_TICKS(10000));
+//    ESP_LOGE(TAG, "conitnue...");
     xTaskCreate(&ota_example_task, "ota_example_task", 8192, dce.get(), 5, NULL);
 
+    while (1) {
+        std::string str;
+        if (dce->get_imsi(str) == esp_modem::command_result::OK) {
+            std::cout << "Modem IMSI number:" << str << std::endl;
+        }
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+    //    if (dce->get_imsi(str) == esp_modem::command_result::OK) {
+//        std::cout << "Modem IMSI number:" << str << std::endl;
+//    }
     vTaskDelay(portMAX_DELAY);
 
     esp_https_ota_config_t ota_config = { };
