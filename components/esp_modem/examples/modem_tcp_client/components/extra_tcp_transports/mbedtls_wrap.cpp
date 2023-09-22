@@ -146,7 +146,7 @@ Tls::~Tls()
 bool Tls::get_session()
 {
     if (session_ == nullptr) {
-        session_ = std::make_unique<mbedtls_ssl_session>();
+        session_ = unique_session(nullptr, mbedtls_ssl_session_free);
     }
     int ret = mbedtls_ssl_get_session(&ssl_, session_.get());
     if (ret != 0) {
@@ -176,5 +176,5 @@ void Tls::reset_session()
 }
 bool Tls::is_session_loaded()
 {
-        return session_ != nullptr;
+    return session_ != nullptr;
 }

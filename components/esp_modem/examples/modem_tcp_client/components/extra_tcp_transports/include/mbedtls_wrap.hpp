@@ -41,7 +41,8 @@ protected:
     mbedtls_ssl_config conf_{};
     mbedtls_ctr_drbg_context ctr_drbg_{};
     mbedtls_entropy_context entropy_{};
-    std::unique_ptr<mbedtls_ssl_session> session_{nullptr};
+    using unique_session = std::unique_ptr<mbedtls_ssl_session, decltype(&mbedtls_ssl_session_free)>;
+    unique_session session_{nullptr, nullptr};
     virtual void delay() {}
 
     bool set_session();
