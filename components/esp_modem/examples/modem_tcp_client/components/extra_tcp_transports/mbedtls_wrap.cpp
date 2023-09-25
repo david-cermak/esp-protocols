@@ -146,9 +146,9 @@ Tls::~Tls()
 bool Tls::get_session()
 {
     if (session_ == nullptr) {
-        session_ = unique_session(nullptr, mbedtls_ssl_session_free);
+        session_ = std::make_unique<unique_session>();
     }
-    int ret = mbedtls_ssl_get_session(&ssl_, session_.get());
+    int ret = ::mbedtls_ssl_get_session(&ssl_, session_->ptr());
     if (ret != 0) {
         print_error("mbedtls_ssl_get_session() failed", ret);
         return false;
@@ -162,7 +162,7 @@ bool Tls::set_session()
         printf("session hasn't been initialized");
         return false;
     }
-    int ret = mbedtls_ssl_set_session(&ssl_, session_.get());
+    int ret = mbedtls_ssl_set_session(&ssl_, session_->ptr());
     if (ret != 0) {
         print_error("mbedtls_ssl_set_session() failed", ret);
         return false;

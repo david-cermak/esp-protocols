@@ -41,8 +41,6 @@ protected:
     mbedtls_ssl_config conf_{};
     mbedtls_ctr_drbg_context ctr_drbg_{};
     mbedtls_entropy_context entropy_{};
-    using unique_session = std::unique_ptr<mbedtls_ssl_session, decltype(&mbedtls_ssl_session_free)>;
-    unique_session session_{nullptr, nullptr};
     virtual void delay() {}
 
     bool set_session();
@@ -57,5 +55,12 @@ private:
     int mbedtls_pk_parse_key( mbedtls_pk_context *ctx,
                               const unsigned char *key, size_t keylen,
                               const unsigned char *pwd, size_t pwdlen);
+    struct unique_session {
+        unique_session()  { ::mbedtls_ssl_session_init(&s); }
+        ~unique_session() { ::mbedtls_ssl_session_free(&s); }
+        mbedtls_ssl_session* ptr() { return &s; }
+        mbedtls_ssl_session s;
+    };
+    std::unique_ptr<unique_session> session_;
 
 };
