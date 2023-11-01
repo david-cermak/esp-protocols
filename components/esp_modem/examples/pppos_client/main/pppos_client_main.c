@@ -145,6 +145,19 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
 }
 
 
+void test_task(void *ctx)
+{
+    while (1) {
+        esp_netif_config_t cfg = ESP_NETIF_DEFAULT_WIFI_AP();
+        esp_netif_t *netif = esp_netif_new(&cfg);
+        assert(netif);
+        esp_netif_destroy(netif);
+        printf(".");
+
+    }
+
+}
+
 void app_main(void)
 {
     /* Init and register system/core components */
@@ -153,12 +166,23 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &on_ip_event, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &on_ppp_changed, NULL));
 
+
+    xTaskCreate(test_task, "test_task", 2048, NULL, 5, NULL);
     /* Configure the PPP netif */
     esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG(CONFIG_EXAMPLE_MODEM_PPP_APN);
-    esp_netif_config_t netif_ppp_config = ESP_NETIF_DEFAULT_PPP();
-    esp_netif_t *esp_netif = esp_netif_new(&netif_ppp_config);
-    assert(esp_netif);
+    while (1) {
 
+        esp_netif_config_t netif_ppp_config = ESP_NETIF_DEFAULT_PPP();
+        esp_netif_t *esp_netif = esp_netif_new(&netif_ppp_config);
+        assert(esp_netif);
+        esp_netif_destroy(esp_netif);
+        printf("*");
+        //42d1df82073359f3ae428e15d1abd229b936a048
+    }
+
+    esp_netif_config_t netif_ppp_config = ESP_NETIF_DEFAULT_PPP();
+
+    esp_netif_t *esp_netif = esp_netif_new(&netif_ppp_config);
     event_group = xEventGroupCreate();
 
     /* Configure the DTE */
