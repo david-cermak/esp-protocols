@@ -1,0 +1,7 @@
+## IDF Component Manager Manifest File
+dependencies:
+  idf:
+    version: ">=5.3"
+  freertos_tcp:
+    version: "*"
+    override_path: '../../../'
