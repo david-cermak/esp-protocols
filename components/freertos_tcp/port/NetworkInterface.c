@@ -26,7 +26,8 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_private/wifi.h"
-// #include "tcpip_adapter.h"
+#include "esp_netif.h"
+#include "esp_netif_net_stack.h"
 
 enum if_state_t {
     INTERFACE_DOWN = 0,
@@ -34,9 +35,9 @@ enum if_state_t {
 };
 
 static const char *TAG = "NetInterface";
-volatile static uint32_t xInterfaceState = INTERFACE_DOWN;
+//volatile static uint32_t xInterfaceState = INTERFACE_DOWN;
 
-static NetworkInterface_t *pxMyInterface;
+//static NetworkInterface_t *pxMyInterface;
 
 static BaseType_t xESP32_Eth_NetworkInterfaceInitialise( NetworkInterface_t *pxInterface );
 
@@ -70,6 +71,7 @@ NetworkInterface_t *pxESP32_Eth_FillInterfaceDescriptor( BaseType_t xEMACIndex,
         NetworkInterface_t *pxInterface )
 {
     static char pcName[ 8 ];
+    printf("pxESP32_Eth_FillInterfaceDescriptor\n");
 
     /* This function pxESP32_Eth_FillInterfaceDescriptor() adds a network-interface.
      * Make sure that the object pointed to by 'pxInterface'
@@ -79,13 +81,12 @@ NetworkInterface_t *pxESP32_Eth_FillInterfaceDescriptor( BaseType_t xEMACIndex,
 
     memset( pxInterface, '\0', sizeof( *pxInterface ) );
     pxInterface->pcName = pcName;                    /* Just for logging, debugging. */
-    pxInterface->pvArgument = ( void * ) xEMACIndex; /* Has only meaning for the driver functions. */
     pxInterface->pfInitialise = xESP32_Eth_NetworkInterfaceInitialise;
     pxInterface->pfOutput = xESP32_Eth_NetworkInterfaceOutput;
     pxInterface->pfGetPhyLinkStatus = xESP32_Eth_GetPhyLinkStatus;
 
     FreeRTOS_AddNetworkInterface( pxInterface );
-    pxMyInterface = pxInterface;
+//    pxMyInterface = pxInterface;
 
     return pxInterface;
 }
@@ -94,29 +95,14 @@ NetworkInterface_t *pxESP32_Eth_FillInterfaceDescriptor( BaseType_t xEMACIndex,
 static BaseType_t xESP32_Eth_NetworkInterfaceInitialise( NetworkInterface_t *pxInterface )
 {
     printf("xESP32_Eth_NetworkInterfaceInitialise\n");
-//    xInterfaceState = INTERFACE_UP;
-    static BaseType_t xMACAdrInitialized = pdFALSE;
-    uint8_t ucMACAddress[ ipMAC_ADDRESS_LENGTH_BYTES ];
-
-    if ( xInterfaceState == INTERFACE_UP ) {
-        if ( xMACAdrInitialized == pdFALSE ) {
-            ESP_LOGE(TAG, "Updaing MAC!");
-            esp_wifi_get_mac( ESP_IF_WIFI_STA, ucMACAddress );
-            FreeRTOS_UpdateMACAddress( ucMACAddress );
-            xMACAdrInitialized = pdTRUE;
-        }
-
-        return pdTRUE;
-    }
-
-    return pdFALSE;
+    return pxInterface->bits.bInterfaceUp ? pdTRUE : pdFALSE;
 }
 
 static BaseType_t xESP32_Eth_GetPhyLinkStatus( NetworkInterface_t *pxInterface )
 {
     BaseType_t xResult = pdFALSE;
 
-    if ( xInterfaceState == INTERFACE_UP ) {
+    if ( pxInterface->bits.bInterfaceUp) {
         xResult = pdTRUE;
     }
 
@@ -127,7 +113,7 @@ static BaseType_t xESP32_Eth_NetworkInterfaceOutput( NetworkInterface_t *pxInter
         NetworkBufferDescriptor_t *const pxDescriptor,
         BaseType_t xReleaseAfterSend )
 {
-    ESP_LOGI(TAG, "xESP32_Eth_NetworkInterfaceOutput");
+//    ESP_LOGI(TAG, "xESP32_Eth_NetworkInterfaceOutput");
     if ( ( pxDescriptor == NULL ) || ( pxDescriptor->pucEthernetBuffer == NULL ) || ( pxDescriptor->xDataLength == 0 ) ) {
         ESP_LOGE( TAG, "Invalid params" );
         return pdFALSE;
@@ -135,17 +121,17 @@ static BaseType_t xESP32_Eth_NetworkInterfaceOutput( NetworkInterface_t *pxInter
 
     esp_err_t ret;
 
-    if ( xInterfaceState == INTERFACE_DOWN ) {
+    if (!(pxInterface->bits.bInterfaceUp)) {
         ESP_LOGD( TAG, "Interface down" );
         ret = ESP_FAIL;
     } else {
-        ret = esp_wifi_internal_tx( ESP_IF_WIFI_STA, pxDescriptor->pucEthernetBuffer, pxDescriptor->xDataLength );
-
+        esp_netif_t *esp_netif = pxInterface->pvArgument;
+        ret = esp_netif_transmit(esp_netif, pxDescriptor->pucEthernetBuffer, pxDescriptor->xDataLength);
         if ( ret != ESP_OK ) {
             ESP_LOGE( TAG, "Failed to tx buffer %p, len %d, err %d", pxDescriptor->pucEthernetBuffer, pxDescriptor->xDataLength, ret );
         }
-        ESP_LOGI(TAG, "xESP32_Eth_NetworkInterfaceOutput");
-        ESP_LOG_BUFFER_HEXDUMP(TAG, pxDescriptor->pucEthernetBuffer, pxDescriptor->xDataLength, ESP_LOG_INFO);
+//        ESP_LOGI(TAG, "xESP32_Eth_NetworkInterfaceOutput");
+        ESP_LOG_BUFFER_HEXDUMP(TAG, pxDescriptor->pucEthernetBuffer, pxDescriptor->xDataLength, ESP_LOG_VERBOSE);
     }
 
 #if ( ipconfigHAS_PRINTF != 0 )
@@ -166,6 +152,7 @@ static BaseType_t xESP32_Eth_NetworkInterfaceOutput( NetworkInterface_t *pxInter
     return ret == ESP_OK ? pdTRUE : pdFALSE;
 }
 
+/*
 void vNetworkNotifyIFDown()
 {
     IPStackEvent_t xRxEvent = { eNetworkDownEvent, NULL };
@@ -175,14 +162,9 @@ void vNetworkNotifyIFDown()
         xSendEventStructToIPTask( &xRxEvent, 0 );
     }
 }
+*/
 
-
-static esp_err_t wifi_rc_cb(void *buffer, uint16_t len, void *eb)
-
-//esp_err_t wlanif_input( void * netif,
-//                        void * buffer,
-//                        uint16_t len,
-//                        void * eb )
+esp_err_t xESP32_Eth_NetworkInterfaceInput(NetworkInterface_t *pxInterface, void *buffer, size_t len, void *eb)
 {
     NetworkBufferDescriptor_t *pxNetworkBuffer;
     IPStackEvent_t xRxEvent = { eNetworkRxEvent, NULL };
@@ -196,7 +178,7 @@ static esp_err_t wifi_rc_cb(void *buffer, uint16_t len, void *eb)
 
     if ( eConsiderFrameForProcessing( buffer ) != eProcessBuffer ) {
         ESP_LOGD( TAG, "Dropping packet" );
-        esp_wifi_internal_free_rx_buffer( eb );
+        esp_netif_free_rx_buffer(pxInterface->pvArgument, eb );
         return ESP_OK;
     }
 
@@ -205,8 +187,8 @@ static esp_err_t wifi_rc_cb(void *buffer, uint16_t len, void *eb)
     if ( pxNetworkBuffer != NULL ) {
         /* Set the packet size, in case a larger buffer was returned. */
         pxNetworkBuffer->xDataLength = len;
-        pxNetworkBuffer->pxInterface = pxMyInterface;
-        pxNetworkBuffer->pxEndPoint = FreeRTOS_MatchingEndpoint( pxMyInterface, pxNetworkBuffer );
+        pxNetworkBuffer->pxInterface = pxInterface;
+        pxNetworkBuffer->pxEndPoint = FreeRTOS_MatchingEndpoint( pxInterface, buffer );
 
         /* Copy the packet data. */
         memcpy( pxNetworkBuffer->pucEthernetBuffer, buffer, len );
@@ -218,7 +200,7 @@ static esp_err_t wifi_rc_cb(void *buffer, uint16_t len, void *eb)
             return ESP_FAIL;
         }
 
-        esp_wifi_internal_free_rx_buffer( eb );
+        esp_netif_free_rx_buffer(pxInterface->pvArgument, eb );
         return ESP_OK;
     } else {
         ESP_LOGE( TAG, "Failed to get buffer descriptor" );
@@ -226,10 +208,19 @@ static esp_err_t wifi_rc_cb(void *buffer, uint16_t len, void *eb)
     }
 }
 
-void vNetworkNotifyIFUp()
+void vNetworkNotifyIFUp(NetworkInterface_t *pxInterface)
 {
-    xInterfaceState = INTERFACE_UP;
-    if (esp_wifi_internal_reg_rxcb(WIFI_IF_STA,  wifi_rc_cb) != ESP_OK) {
-        ESP_LOGE( TAG, "Failed to register wifi callback" );
-    }
+    pxInterface->bits.bInterfaceUp = 1;
+    IPStackEvent_t xRxEvent = { eNetworkDownEvent, NULL };
+    xRxEvent.pvData = pxInterface;
+    xSendEventStructToIPTask( &xRxEvent, 0 );
+
+
+//    pxInterface->bits.bInterfaceUp = 1;
+//    xInterfaceState = INTERFACE_UP;
+//    IPStackEvent_t xRxEvent = { eNetworkDownEvent, NULL };
+//    xSendEventStructToIPTask( &xRxEvent, 0 );
+//    if (esp_wifi_internal_reg_rxcb(WIFI_IF_STA,  wifi_rc_cb) != ESP_OK) {
+//        ESP_LOGE( TAG, "Failed to register wifi callback" );
+//    }
 }

@@ -40,12 +40,22 @@
 #ifndef FREERTOS_IP_CONFIG_H
 #define FREERTOS_IP_CONFIG_H
 
-#define ipconfigUSE_IPv4                           ( 1 )
 
+#ifdef CONFIG_AFPT_IPV4
+#define ipconfigUSE_IPv4                           ( 1 )
+#else
+#define ipconfigUSE_IPv4                           ( 0 )
+#endif
+
+#ifdef CONFIG_AFPT_IPV6
+#define ipconfigUSE_IPv6                           ( 1 )
+#else
 #define ipconfigUSE_IPv6                           ( 0 )
+#endif
 
 #define ipconfigUSE_DHCPv6                         0
-#define ipconfigIPv4_BACKWARD_COMPATIBLE           1
+#define ipconfigUSE_RA                             1
+#define ipconfigIPv4_BACKWARD_COMPATIBLE           0
 #define ipconfigUSE_ARP_REVERSED_LOOKUP            1
 #define ipconfigUSE_ARP_REMOVE_ENTRY               1
 #define ipconfigARP_STORES_REMOTE_ADDRESSES        1

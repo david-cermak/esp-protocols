@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2010-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: CC0-1.0
  */
@@ -17,6 +17,9 @@
 #include "time.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
+#include "esp_event.h"
+#include "esp_netif.h"
+#include "protocol_examples_common.h"
 
 #define TAG "wifi-connect"
 
@@ -54,6 +57,18 @@ NetworkInterface_t *pxESP32_Eth_FillInterfaceDescriptor( BaseType_t xEMACIndex,
 
 void app_main(void)
 {
+    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
+     * Read "Establishing Wi-Fi or Ethernet Connection" section in
+     * examples/protocols/README.md for more information about this function.
+     */
+    ESP_ERROR_CHECK(example_connect());
+    return;
+
+
     printf("Hello world!\n");
     pxESP32_Eth_FillInterfaceDescriptor( 0, &( xInterfaces[ 0 ] ) );
 
@@ -116,59 +131,7 @@ void app_main(void)
 }
 
 
-/* Called by FreeRTOS+TCP when the network connects or disconnects.  Disconnect
- * events are only received if implemented in the MAC driver. */
-#if defined( ipconfigIPv4_BACKWARD_COMPATIBLE ) && ( ipconfigIPv4_BACKWARD_COMPATIBLE == 0 )
-void vApplicationIPNetworkEventHook_Multi( eIPCallbackEvent_t eNetworkEvent,
-        struct xNetworkEndPoint *pxEndPoint )
-#else
-void vApplicationIPNetworkEventHook( eIPCallbackEvent_t eNetworkEvent )
-#endif /* defined( ipconfigIPv4_BACKWARD_COMPATIBLE ) && ( ipconfigIPv4_BACKWARD_COMPATIBLE == 0 ) */
-{
-    uint32_t ulIPAddress, ulNetMask, ulGatewayAddress, ulDNSServerAddress;
-    char cBuffer[ 16 ];
-    static BaseType_t xTasksAlreadyCreated = pdFALSE;
 
-    /* If the network has just come up...*/
-    if ( eNetworkEvent == eNetworkUp ) {
-        /* Create the tasks that use the IP stack if they have not already been
-         * created. */
-        if ( xTasksAlreadyCreated == pdFALSE ) {
-            /* See the comments above the definitions of these pre-processor
-             * macros at the top of this file for a description of the individual
-             * demo tasks. */
-
-#if ( mainCREATE_TCP_ECHO_TASKS_SINGLE == 1 )
-            {
-                vStartTCPEchoClientTasks_SingleTasks( mainECHO_CLIENT_TASK_STACK_SIZE, mainECHO_CLIENT_TASK_PRIORITY );
-            }
-#endif /* mainCREATE_TCP_ECHO_TASKS_SINGLE */
-
-            xTasksAlreadyCreated = pdTRUE;
-        }
-
-        /* Print out the network configuration, which may have come from a DHCP
-         * server. */
-#if defined( ipconfigIPv4_BACKWARD_COMPATIBLE ) && ( ipconfigIPv4_BACKWARD_COMPATIBLE == 0 )
-        FreeRTOS_GetEndPointConfiguration( &ulIPAddress, &ulNetMask, &ulGatewayAddress, &ulDNSServerAddress, pxNetworkEndPoints );
-#else
-        FreeRTOS_GetAddressConfiguration( &ulIPAddress, &ulNetMask, &ulGatewayAddress, &ulDNSServerAddress );
-#endif /* defined( ipconfigIPv4_BACKWARD_COMPATIBLE ) && ( ipconfigIPv4_BACKWARD_COMPATIBLE == 0 ) */
-        FreeRTOS_inet_ntoa( ulIPAddress, cBuffer );
-        printf( "\r\n\r\nIP Address: %s\r\n", cBuffer );
-
-        FreeRTOS_inet_ntoa( ulNetMask, cBuffer );
-        printf( "Subnet Mask: %s\r\n", cBuffer );
-
-        FreeRTOS_inet_ntoa( ulGatewayAddress, cBuffer );
-        printf( "Gateway Address: %s\r\n", cBuffer );
-
-        FreeRTOS_inet_ntoa( ulDNSServerAddress, cBuffer );
-        printf( "DNS Server Address: %s\r\n\r\n\r\n", cBuffer );
-    } else {
-        printf( "Application idle hook network down\n" );
-    }
-}
 /*-----------------------------------------------------------*/
 
 UBaseType_t uxRand( void )
@@ -182,34 +145,6 @@ UBaseType_t uxRand( void )
 }
 /*-----------------------------------------------------------*/
 
-static void prvSRand( UBaseType_t ulSeed )
-{
-    /* Utility function to seed the pseudo random number generator. */
-    ulNextRand = ulSeed;
-}
-/*-----------------------------------------------------------*/
-
-static void prvMiscInitialisation( void )
-{
-    time_t xTimeNow;
-    uint32_t ulRandomNumbers[ 4 ];
-
-    /* Seed the random number generator. */
-    time( &xTimeNow );
-    FreeRTOS_debug_printf( ( "Seed for randomiser: %lu\n", xTimeNow ) );
-    prvSRand( ( uint32_t ) xTimeNow );
-
-    ( void ) xApplicationGetRandomNumber( &ulRandomNumbers[ 0 ] );
-    ( void ) xApplicationGetRandomNumber( &ulRandomNumbers[ 1 ] );
-    ( void ) xApplicationGetRandomNumber( &ulRandomNumbers[ 2 ] );
-    ( void ) xApplicationGetRandomNumber( &ulRandomNumbers[ 3 ] );
-
-    FreeRTOS_debug_printf( ( "Random numbers: %08X %08X %08X %08X\n",
-                             ulRandomNumbers[ 0 ],
-                             ulRandomNumbers[ 1 ],
-                             ulRandomNumbers[ 2 ],
-                             ulRandomNumbers[ 3 ] ) );
-}
 /*-----------------------------------------------------------*/
 
 #if ( ipconfigUSE_LLMNR != 0 ) || ( ipconfigUSE_NBNS != 0 ) || ( ipconfigDHCP_REGISTER_HOSTNAME == 1 )
@@ -307,11 +242,12 @@ void vApplicationPingReplyHook( ePingReplyStatus_t eStatus,
     /* Provide a stub for this function. */
 }
 
-eDHCPCallbackAnswer_t xApplicationDHCPHook( eDHCPCallbackPhase_t eDHCPPhase,
-        uint32_t ulIPAddress )
+eDHCPCallbackAnswer_t xApplicationDHCPHook_Multi( eDHCPCallbackPhase_t eDHCPPhase,
+        struct xNetworkEndPoint *pxEndPoint,
+        IP_Address_t *pxIPAddress )
 {
     ( void ) eDHCPPhase;
-    ( void ) ulIPAddress;
+    ( void ) pxIPAddress;
 
     return eDHCPContinue;
 }
@@ -344,7 +280,8 @@ void vNetworkInterfaceAllocateRAMToBuffers( NetworkBufferDescriptor_t pxNetworkB
 #include "esp_event.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
-void vNetworkNotifyIFUp();
+//void vNetworkNotifyIFUp();
+void vNetworkNotifyIFUp(NetworkInterface_t *pxInterface);
 static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
@@ -354,7 +291,7 @@ static void event_handler(void *arg, esp_event_base_t event_base,
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
-        vNetworkNotifyIFUp();
+        vNetworkNotifyIFUp(&xInterfaces[0]);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         esp_wifi_connect();
         ESP_LOGI(TAG, "connect to the AP fail");

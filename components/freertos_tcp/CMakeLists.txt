@@ -53,8 +53,13 @@ set(fpt_srcs ${fpt_dir}/FreeRTOS_ARP.c
 
 
 idf_component_register(SRCS ${fpt_srcs} port/FreeRTOSIPConfig.c port/NetworkInterface.c
+                            esp_netif/defaults.c
+                            esp_netif/interface.c
+                            esp_netif/esp_netif_impl.c
                     INCLUDE_DIRS "port/include"
                     PRIV_INCLUDE_DIRS ${fdir} ${fcdir} ${fpt_include_dir} ${wdir}
-                    PRIV_REQUIRES esp_wifi)
+                    PRIV_REQUIRES esp_wifi esp_netif)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE "-Wno-format")
+target_compile_definitions(${COMPONENT_LIB} PUBLIC "FREERTOS_CONFIG_H")
+target_link_libraries(${COMPONENT_LIB} PRIVATE "-u _g_esp_netif_netstack_default_wifi_sta")
