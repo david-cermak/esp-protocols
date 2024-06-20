@@ -3,9 +3,6 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-//
-// Created by david on 6/17/24.
-//
 #include "esp_netif.h"
 #include "esp_netif_net_stack.h"
 #include "interface.h"
@@ -16,15 +13,15 @@
 #define MAX_ENDPOINTS_PER_NETIF     4
 
 static const char *TAG = "esp_netif_AFpT";
-static bool s_netif_initialized = false;
 
+static bool s_netif_initialized = false;
+static bool s_FreeRTOS_IP_started = false;
 
 struct esp_netif_stack {
     esp_netif_netstack_config_t config;
     NetworkInterface_t aft_netif;
-    NetworkEndPoint_t xEndPoints[MAX_ENDPOINTS_PER_NETIF];
+    NetworkEndPoint_t endpoints[MAX_ENDPOINTS_PER_NETIF];
 };
-
 
 struct esp_netif_obj {
     uint8_t mac[6];
@@ -36,25 +33,26 @@ struct esp_netif_obj {
     // stack related
     struct esp_netif_stack *net_stack;
 
+
     // misc flags, types, keys, priority
     esp_netif_flags_t flags;
     char *hostname;
     char *if_key;
     char *if_desc;
     int route_prio;
+    uint32_t got_ip_event;
+    uint32_t lost_ip_event;
 };
 
-static uint8_t ucMACAddress[ 6 ] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55 };
+static inline void ip4_to_afpt_ip(const esp_ip4_addr_t *ip, uint8_t afpt_ip[4])
+{
+    afpt_ip[0] = esp_ip4_addr1(ip);
+    afpt_ip[1] = esp_ip4_addr2(ip);
+    afpt_ip[2] = esp_ip4_addr3(ip);
+    afpt_ip[4] = esp_ip4_addr4(ip);
+}
 
-/* Define the network addressing.  These parameters will be used if either
-   ipconfigUDE_DHCP is 0 or if ipconfigUSE_DHCP is 1 but DHCP auto configuration
-   failed. */
-static const uint8_t ucIPAddress[ 4 ] = { 10, 10, 10, 200 };
-static const uint8_t ucNetMask[ 4 ] = { 255, 0, 0, 0 };
-static const uint8_t ucGatewayAddress[ 4 ] = { 10, 10, 10, 1 };
-static const uint8_t ucDNSServerAddress[ 4 ] = { 208, 67, 222, 222 };
-
-void *esp_netif_new_netstack_if(esp_netif_t *esp_netif, const esp_netif_netstack_config_t *cfg)
+struct esp_netif_stack *esp_netif_new_netstack_if(esp_netif_t *esp_netif, const esp_netif_inherent_config_t *base_cfg, const esp_netif_netstack_config_t *cfg)
 {
     static int netif_count = 0;
     struct esp_netif_stack *netif = calloc(1, sizeof(struct esp_netif_stack));
@@ -66,13 +64,22 @@ void *esp_netif_new_netstack_if(esp_netif_t *esp_netif, const esp_netif_netstack
         free(netif);
         return NULL;
     }
-//    ESP_LOGW(TAG, "%d %p", netif_count, netif->config.init_fn);
-//    FreeRTOS_IPInit_Multi();
-    FreeRTOS_FillEndPoint( &( netif->aft_netif ), &( netif->xEndPoints[0]), ucIPAddress, ucNetMask, ucGatewayAddress, ucDNSServerAddress, ucMACAddress );
-    netif->xEndPoints[ 0 ].bits.bWantDHCP = pdTRUE;
+
+    uint8_t ip[4] = { 0 }, mask[4] = { 0 }, gw[4] = { 0 }, dns[4] = { 0 };
+    if (base_cfg->ip_info) {
+        ip4_to_afpt_ip(&base_cfg->ip_info->ip, ip);
+        ip4_to_afpt_ip(&base_cfg->ip_info->netmask, mask);
+        ip4_to_afpt_ip(&base_cfg->ip_info->gw, gw);
+    }
+    FreeRTOS_FillEndPoint( &( netif->aft_netif ), &( netif->endpoints[0]), ip, mask, gw, dns, base_cfg->mac );
+    if (base_cfg->flags & ESP_NETIF_DHCP_CLIENT) {
+        netif->endpoints[0].bits.bWantDHCP = pdTRUE;
+    }
     netif->aft_netif.bits.bInterfaceUp = 0;
-    //    netif->xEndPoints[ 0 ].bits.bEndPointUp = pdFALSE;
-    FreeRTOS_IPInit_Multi();
+    if (!s_FreeRTOS_IP_started) {
+        s_FreeRTOS_IP_started = true;
+        FreeRTOS_IPInit_Multi();
+    }
 
     netif->aft_netif.pvArgument = esp_netif;
     netif->config.input_fn = cfg->input_fn;
@@ -83,19 +90,10 @@ void *esp_netif_new_netstack_if(esp_netif_t *esp_netif, const esp_netif_netstack
 esp_err_t esp_netif_receive(esp_netif_t *esp_netif, void *buffer, size_t len, void *eb)
 {
     struct esp_netif_stack *netif = esp_netif->net_stack;
-//    ESP_LOGW(TAG, "esp_netif_receive() %d %p", len, netif->config.input_fn);
     return netif->config.input_fn(&netif->aft_netif, buffer, len, eb);
 }
 
 void vNetworkNotifyIFUp(NetworkInterface_t *pxInterface);
-
-//esp_err_t esp_netif_update_netstack_if(void* netif, esp_netif_status_update_t status)
-//{
-//    if (status == ESP_NETIF_STATUS_CONNECTED) {
-//        vNetworkNotifyIFUp();
-//    }
-//    return ESP_OK;
-//}
 
 void esp_netif_set_ip4_addr(esp_ip4_addr_t *addr, uint8_t a, uint8_t b, uint8_t c, uint8_t d)
 {
@@ -105,7 +103,8 @@ void esp_netif_set_ip4_addr(esp_ip4_addr_t *addr, uint8_t a, uint8_t b, uint8_t 
 
 char *esp_ip4addr_ntoa(const esp_ip4_addr_t *addr, char *buf, int buflen)
 {
-    return NULL;
+    FreeRTOS_inet_ntoa(addr->addr, buf);
+    return buf;
 }
 
 esp_netif_iodriver_handle esp_netif_get_io_driver(esp_netif_t *esp_netif)
@@ -115,17 +114,17 @@ esp_netif_iodriver_handle esp_netif_get_io_driver(esp_netif_t *esp_netif)
 
 esp_netif_t *esp_netif_get_handle_from_netif_impl(void *dev)
 {
-    return NULL;
+    NetworkInterface_t *netif = dev;
+    return (esp_netif_t *)netif->pvArgument;
 }
 
 esp_err_t esp_netif_init(void)
 {
-    ESP_LOGI(TAG, "loopback initialization");
+    ESP_LOGI(TAG, "esp_netif AFpT initialization");
     if (s_netif_initialized) {
         ESP_LOGE(TAG, "esp-netif has already been initialized");
-        return ESP_ERR_INVALID_SIZE;
+        return ESP_ERR_INVALID_ARG;
     }
-
     s_netif_initialized = true;
     ESP_LOGD(TAG, "esp-netif has been successfully initialized");
     return ESP_OK;
@@ -133,7 +132,7 @@ esp_err_t esp_netif_init(void)
 
 esp_err_t esp_netif_deinit(void)
 {
-    ESP_LOGI(TAG, "loopback initialization");
+    ESP_LOGI(TAG, "esp_netif AFpT deinit");
     if (!s_netif_initialized) {
         ESP_LOGE(TAG, "esp-netif has not been initialized yet");
         return ESP_ERR_INVALID_SIZE;
@@ -162,9 +161,11 @@ static esp_err_t esp_netif_init_configuration(esp_netif_t *esp_netif, const esp_
     if (cfg->base->route_prio) {
         esp_netif->route_prio = cfg->base->route_prio;
     }
+    esp_netif->got_ip_event = cfg->base->get_ip_event;
+    esp_netif->lost_ip_event = cfg->base->lost_ip_event;
 
     // Network stack configs
-    esp_netif->net_stack = esp_netif_new_netstack_if(esp_netif, cfg->stack);
+    esp_netif->net_stack = esp_netif_new_netstack_if(esp_netif, cfg->base, cfg->stack);
 
     // Install IO functions only if provided -- connects driver and netif
     // this configuration could be updated after esp_netif_new(), typically in post_attach callback
@@ -203,9 +204,6 @@ esp_netif_t *esp_netif_new(const esp_netif_config_t *esp_netif_config)
         return NULL;
     }
 
-    // creating another ip info (to store old ip)
-//    esp_netif_add_to_list_unsafe(esp_netif);
-
     // Configure the created object with provided configuration
     esp_err_t ret =  esp_netif_init_configuration(esp_netif, esp_netif_config);
     if (ret != ESP_OK) {
@@ -220,7 +218,6 @@ esp_netif_t *esp_netif_new(const esp_netif_config_t *esp_netif_config)
 void esp_netif_destroy(esp_netif_t *esp_netif)
 {
     if (esp_netif) {
-//        esp_netif_remove_from_list_unsafe(esp_netif);
         free(esp_netif->if_key);
         free(esp_netif->if_desc);
         free(esp_netif);
@@ -258,20 +255,13 @@ esp_err_t esp_netif_set_mac(esp_netif_t *esp_netif, uint8_t ucMACAddress[])
 {
     ESP_LOGI(TAG, "esp_netif_set_mac()");
     memcpy(esp_netif->mac, ucMACAddress, 6);
-//    uint8_t ucMACAddress[ ipMAC_ADDRESS_LENGTH_BYTES ];
-
-//    FreeRTOS_UpdateMACAddress( ucMACAddress );
-
     return ESP_OK;
 }
 
 esp_err_t esp_netif_start(esp_netif_t *esp_netif)
 {
     ESP_LOGI(TAG, "Netif started");
-    memcpy(&esp_netif->net_stack->xEndPoints->xMACAddress, esp_netif->mac, 6);
-//    FreeRTOS_UpdateMACAddress( esp_netif->mac );
-
-//    vNetworkNotifyIFUp(&esp_netif->net_stack->aft_netif);
+    memcpy(&esp_netif->net_stack->endpoints[0].xMACAddress, esp_netif->mac, 6);
     return ESP_OK;
 }
 
@@ -293,18 +283,19 @@ void esp_netif_free_rx_buffer(void *h, void *buffer)
 
 esp_err_t esp_netif_transmit(esp_netif_t *esp_netif, void *data, size_t len)
 {
-    ESP_LOGW(TAG, "Transmitting data: ptr:%p, size:%lu", data, (long unsigned int) len);
+    ESP_LOGD(TAG, "Transmitting data: ptr:%p, size:%lu", data, (long unsigned int) len);
     return (esp_netif->driver_transmit)(esp_netif->driver_handle, data, len);
 }
 
 esp_err_t esp_netif_dhcpc_stop(esp_netif_t *esp_netif)
 {
-    return ESP_ERR_NOT_SUPPORTED;
+    esp_netif->net_stack->endpoints[0].bits.bWantDHCP = pdFALSE;
+    return ESP_OK;
 }
 
 esp_err_t esp_netif_dhcpc_start(esp_netif_t *esp_netif)
 {
-//    esp_netif->net_stack->xEndPoints[ 0 ].bits.bWantDHCP = pdTRUE;
+    esp_netif->net_stack->endpoints[0].bits.bWantDHCP = pdTRUE;
     return ESP_OK;
 }
 
@@ -331,12 +322,15 @@ esp_err_t esp_netif_dhcps_stop(esp_netif_t *esp_netif)
 
 esp_err_t esp_netif_set_hostname(esp_netif_t *esp_netif, const char *hostname)
 {
-    return ESP_ERR_NOT_SUPPORTED;
+    free(esp_netif->hostname);
+    esp_netif->hostname = strdup(hostname);
+    return ESP_OK;
 }
 
 esp_err_t esp_netif_get_hostname(esp_netif_t *esp_netif, const char **hostname)
 {
-    return ESP_ERR_NOT_SUPPORTED;
+    *hostname = esp_netif->hostname;
+    return ESP_OK;
 }
 
 esp_err_t esp_netif_up(esp_netif_t *esp_netif)
@@ -345,20 +339,21 @@ esp_err_t esp_netif_up(esp_netif_t *esp_netif)
     struct esp_netif_stack *netif = esp_netif->net_stack;
     netif->aft_netif.bits.bInterfaceUp = 1;
     vNetworkNotifyIFUp(&esp_netif->net_stack->aft_netif);
-
-//    vNetworkNotifyIFUp();
     return ESP_OK;
 }
 
 esp_err_t esp_netif_down(esp_netif_t *esp_netif)
 {
     ESP_LOGI(TAG, "Netif going down");
+    struct esp_netif_stack *netif = esp_netif->net_stack;
+    netif->aft_netif.bits.bInterfaceUp = 0;
     return ESP_OK;
 }
 
 bool esp_netif_is_netif_up(esp_netif_t *esp_netif)
 {
-    return false;
+    struct esp_netif_stack *netif = esp_netif->net_stack;
+    return (netif->aft_netif.bits.bInterfaceUp == pdTRUE_UNSIGNED) ? true : false;
 }
 
 esp_err_t esp_netif_get_old_ip_info(esp_netif_t *esp_netif, esp_netif_ip_info_t *ip_info)
@@ -370,8 +365,13 @@ esp_err_t esp_netif_get_old_ip_info(esp_netif_t *esp_netif, esp_netif_ip_info_t 
 esp_err_t esp_netif_get_ip_info(esp_netif_t *esp_netif, esp_netif_ip_info_t *ip_info)
 {
     ESP_LOGD(TAG, "%s esp_netif:%p", __func__, esp_netif);
-
-    return ESP_ERR_NOT_SUPPORTED;
+    uint32_t ulIPAddress = 0, ulNetMask, ulGatewayAddress, ulDNSServerAddress;
+    struct esp_netif_stack *netif = esp_netif->net_stack;
+    FreeRTOS_GetEndPointConfiguration( &ulIPAddress, &ulNetMask, &ulGatewayAddress, &ulDNSServerAddress, netif->aft_netif.pxEndPoint );
+    ip_info->ip.addr = ulIPAddress;
+    ip_info->netmask.addr = ulNetMask;
+    ip_info->gw.addr = ulGatewayAddress;
+    return ESP_OK;
 }
 
 bool esp_netif_is_valid_static_ip(esp_netif_ip_info_t *ip_info)
@@ -511,11 +511,7 @@ void vApplicationIPNetworkEventHook_Multi( eIPCallbackEvent_t eNetworkEvent,
 
         /* Print out the network configuration, which may have come from a DHCP
          * server. */
-#if defined( ipconfigIPv4_BACKWARD_COMPATIBLE ) && ( ipconfigIPv4_BACKWARD_COMPATIBLE == 0 )
-        FreeRTOS_GetEndPointConfiguration( &ulIPAddress, &ulNetMask, &ulGatewayAddress, &ulDNSServerAddress, pxNetworkEndPoints );
-#else
-        FreeRTOS_GetAddressConfiguration( &ulIPAddress, &ulNetMask, &ulGatewayAddress, &ulDNSServerAddress );
-#endif /* defined( ipconfigIPv4_BACKWARD_COMPATIBLE ) && ( ipconfigIPv4_BACKWARD_COMPATIBLE == 0 ) */
+        FreeRTOS_GetEndPointConfiguration( &ulIPAddress, &ulNetMask, &ulGatewayAddress, &ulDNSServerAddress, pxEndPoint );
         FreeRTOS_inet_ntoa( ulIPAddress, cBuffer );
         printf( "\r\n\r\nIP Address: %s\r\n", cBuffer );
 
@@ -527,19 +523,38 @@ void vApplicationIPNetworkEventHook_Multi( eIPCallbackEvent_t eNetworkEvent,
 
         FreeRTOS_inet_ntoa( ulDNSServerAddress, cBuffer );
         printf( "DNS Server Address: %s\r\n\r\n\r\n", cBuffer );
+        esp_netif_t *esp_netif = pxEndPoint->pxNetworkInterface->pvArgument;
         ip_event_got_ip_t evt = {
-            .esp_netif = pxEndPoint->pxNetworkInterface->pvArgument,
+            .esp_netif = esp_netif,
             .ip_changed = false,
         };
 
         evt.ip_info.ip.addr = ulIPAddress;
         evt.ip_info.gw.addr = ulGatewayAddress;
         evt.ip_info.netmask.addr = ulNetMask;
-        esp_err_t  ret = esp_event_post(IP_EVENT, IP_EVENT_STA_GOT_IP, &evt, sizeof(evt), 0);
+        esp_err_t  ret = esp_event_post(IP_EVENT, esp_netif->got_ip_event, &evt, sizeof(evt), 0);
         if (ESP_OK != ret) {
             ESP_LOGE(TAG, "dhcpc cb: failed to post got ip event (%x)", ret);
         }
     } else {
         printf( "Application idle hook network down\n" );
     }
+}
+
+BaseType_t xApplicationDNSQueryHook_Multi( struct xNetworkEndPoint *pxEndPoint, const char *pcName )
+{
+    BaseType_t xReturn;
+
+    esp_netif_t *esp_netif = pxEndPoint->pxNetworkInterface->pvArgument;
+    /* Determine if a name lookup is for this node.  Two names are given
+     * to this node: that returned by pcApplicationHostnameHook() and that set
+     * by mainDEVICE_NICK_NAME. */
+    if ( strcasecmp( pcName, pcApplicationHostnameHook() ) == 0 ) {
+        xReturn = pdPASS;
+    } else if ( strcasecmp( pcName, esp_netif->hostname ) == 0 ) {
+        xReturn = pdPASS;
+    } else {
+        xReturn = pdFAIL;
+    }
+    return xReturn;
 }

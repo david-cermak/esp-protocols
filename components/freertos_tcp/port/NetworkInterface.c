@@ -175,7 +175,7 @@ esp_err_t xESP32_Eth_NetworkInterfaceInput(NetworkInterface_t *pxInterface, void
         vPrintResourceStats();
     }
 #endif /* ( ipconfigHAS_PRINTF != 0 ) */
-
+//    ESP_LOG_BUFFER_HEXDUMP(TAG, buffer, len, ESP_LOG_INFO);
     if ( eConsiderFrameForProcessing( buffer ) != eProcessBuffer ) {
         ESP_LOGD( TAG, "Dropping packet" );
         esp_netif_free_rx_buffer(pxInterface->pvArgument, eb );

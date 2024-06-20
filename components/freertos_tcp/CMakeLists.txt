@@ -1,6 +1,5 @@
-set(fdir /home/david/esp/idf/components/freertos/FreeRTOS-Kernel/include/freertos)
-set(wdir /home/david/esp/idf/components/esp_wifi/include)
-set(fcdir /home/david/esp/idf/components/freertos/config/include/freertos)
+set(fdir  $ENV{IDF_PATH}/components/freertos/FreeRTOS-Kernel/include/freertos)
+set(fcdir $ENV{IDF_PATH}/components/freertos/config/include/freertos)
 
 set(fpt_dir FreeRTOS-Plus-TCP/source)
 set(fpt_include_dir ${fpt_dir}/include ${fpt_dir}/portable/Compiler/GCC/)
@@ -47,17 +46,18 @@ set(fpt_srcs ${fpt_dir}/FreeRTOS_ARP.c
         ${fpt_dir}/FreeRTOS_UDP_IP.c
         ${fpt_dir}/FreeRTOS_UDP_IPv4.c
         ${fpt_dir}/FreeRTOS_UDP_IPv6.c
-#        ${fpt_dir}/portable/NetworkInterface/esp32/NetworkInterface.c
         ${fpt_dir}/portable/BufferManagement/BufferAllocation_1.c
         )
 
-
-idf_component_register(SRCS ${fpt_srcs} port/FreeRTOSIPConfig.c port/NetworkInterface.c
+idf_component_register(SRCS ${fpt_srcs}
+                    port/FreeRTOSIPConfig.c
+                    port/NetworkInterface.c
+                    port/FreeRTOS_AppHooks.c
                             esp_netif/defaults.c
                             esp_netif/interface.c
                             esp_netif/esp_netif_impl.c
-                    INCLUDE_DIRS "port/include"
-                    PRIV_INCLUDE_DIRS ${fdir} ${fcdir} ${fpt_include_dir} ${wdir}
+                    INCLUDE_DIRS "port/include" ${fpt_include_dir} ${fdir}
+                    PRIV_INCLUDE_DIRS  ${fcdir}
                     PRIV_REQUIRES esp_wifi esp_netif)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE "-Wno-format")
