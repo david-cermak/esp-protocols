@@ -53,7 +53,6 @@ idf_component_register(SRCS ${fpt_srcs}
                     port/FreeRTOSIPConfig.c
                     port/NetworkInterface.c
                     port/FreeRTOS_AppHooks.c
-                            esp_netif/defaults.c
                             esp_netif/interface.c
                             esp_netif/esp_netif_impl.c
                     INCLUDE_DIRS "port/include" ${fpt_include_dir} ${fdir}

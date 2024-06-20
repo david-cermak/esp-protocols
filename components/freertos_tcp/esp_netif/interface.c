@@ -47,3 +47,4 @@ static const struct esp_netif_netstack_config s_netif_config = {
 
 const esp_netif_netstack_config_t *_g_esp_netif_netstack_default_wifi_sta = &s_netif_config;
 const esp_netif_netstack_config_t *_g_esp_netif_netstack_default_wifi_ap  = &s_netif_config;
+const esp_netif_netstack_config_t *_g_esp_netif_netstack_default_eth = &s_netif_config;

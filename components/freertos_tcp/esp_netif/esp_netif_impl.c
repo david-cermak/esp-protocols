@@ -482,6 +482,22 @@ esp_err_t esp_netif_tcpip_exec(esp_netif_callback_fn fn, void *ctx)
     return fn(ctx);
 }
 
+esp_netif_t *esp_netif_find_if(esp_netif_find_predicate_t fn, void *ctx)
+{
+    for (NetworkInterface_t *netif = FreeRTOS_FirstNetworkInterface(); netif != NULL; netif = FreeRTOS_NextNetworkInterface(netif) ) {
+        esp_netif_t *esp_netif = netif->pvArgument;
+        if (fn(esp_netif, ctx)) {
+            return esp_netif;
+        }
+    }
+    return NULL;
+}
+
+esp_err_t esp_netif_set_link_speed(esp_netif_t *esp_netif, uint32_t speed)
+{
+    return ESP_OK;
+}
+
 /* Called by FreeRTOS+TCP when the network connects or disconnects.  Disconnect
  * events are only received if implemented in the MAC driver. */
 void vApplicationIPNetworkEventHook_Multi( eIPCallbackEvent_t eNetworkEvent,
