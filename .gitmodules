@@ -3,4 +3,4 @@
 	url = https://github.com/espressif/asio
 [submodule "components/mosq/mosquitto"]
 	path = components/mosq/mosquitto
-	url = git@github.com:david-cermak/mosquitto.git
+	url = https://github.com/eclipse/mosquitto

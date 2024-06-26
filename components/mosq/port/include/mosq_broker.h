@@ -4,5 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #pragma once
+#include "mosquitto.h"
 
-#define gai_strerror(x) "gai_strerror() not supported"
+struct mosquitto__config;
+
+int run_broker(struct mosquitto__config *config);

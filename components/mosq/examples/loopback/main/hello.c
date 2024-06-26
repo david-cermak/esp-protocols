@@ -4,15 +4,14 @@
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
 #include <stdio.h>
-#include <mosquitto.h>
 #include "nvs_flash.h"
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "mqtt_client.h"
 #include "esp_log.h"
+#include "mosq_broker.h"
 
 #define TAG "test"
-int mosq_main(int argc, char *argv[]);
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
@@ -72,9 +71,7 @@ static void mqtt_app_start(void *ctx)
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = "mqtt://127.0.0.1",
     };
-
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
-    /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
     esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(client);
     vTaskDelete(NULL);
@@ -88,17 +85,5 @@ void app_main(void)
     xTaskCreate(mqtt_app_start, "mqtt_app_start", 4096, NULL, 4, NULL);
 
 
-    mosq_main(0, NULL);
-
-}
-
-const char *mosquitto_client_username(const struct mosquitto *client)
-{
-    return "my_client";
-}
-
-int plugin__handle_message(struct mosquitto *context, struct mosquitto_msg_store *stored)
-{
-    int rc = MOSQ_ERR_SUCCESS;
-    return rc;
+    run_broker(NULL);
 }
