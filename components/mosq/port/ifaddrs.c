@@ -5,6 +5,8 @@
  */
 #include "ifaddrs.h"
 
+// Dummy implementation of getifaddrs()
+// TODO: Implement this if we need to use bind_interface option of listener's config
 int getifaddrs(struct ifaddrs **ifap)
 {
     return -1;

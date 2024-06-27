@@ -215,6 +215,25 @@ const char *mosquitto_client_username(const struct mosquitto *client)
     return "my_client";
 }
 
+char *misc__trimblanks(char *str)
+{
+    char *endptr;
+
+    if (str == NULL) {
+        return NULL;
+    }
+
+    while (isspace((int)str[0])) {
+        str++;
+    }
+    endptr = &str[strlen(str) - 1];
+    while (endptr > str && isspace((int)endptr[0])) {
+        endptr[0] = '\0';
+        endptr--;
+    }
+    return str;
+}
+
 // Dummy definition of fork() to work around IDF warning: " warning: _fork is not implemented and will always fail"
 // fork() is used in mosquitto.c to deamonize the broker, which we do not call.
 pid_t fork (void)

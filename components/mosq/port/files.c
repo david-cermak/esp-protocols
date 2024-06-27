@@ -7,6 +7,8 @@
 #include "mosquitto.h"
 #include "mosquitto_broker_internal.h"
 
+// Dummy implementation of file access
+// This needs to be implemented if we need to load/store config from files
 FILE *mosquitto__fopen(const char *path, const char *mode, bool restrict_read)
 {
     return NULL;
@@ -15,23 +17,4 @@ FILE *mosquitto__fopen(const char *path, const char *mode, bool restrict_read)
 char *fgets_extending(char **buf, int *buflen, FILE *stream)
 {
     return NULL;
-}
-
-char *misc__trimblanks(char *str)
-{
-    char *endptr;
-
-    if (str == NULL) {
-        return NULL;
-    }
-
-    while (isspace((int)str[0])) {
-        str++;
-    }
-    endptr = &str[strlen(str) - 1];
-    while (endptr > str && isspace((int)endptr[0])) {
-        endptr[0] = '\0';
-        endptr--;
-    }
-    return str;
 }

@@ -6,6 +6,7 @@
 #include "mosquitto.h"
 #include "mosquitto_broker_internal.h"
 #include "memory_mosq.h"
+#include "mosq_broker.h"
 
 static struct mosquitto__listener_sock *listensock = NULL;
 static int listensock_count = 0;
@@ -91,13 +92,10 @@ static void listeners__stop(void)
     mosquitto__free(listensock);
 }
 
-int run_broker(struct mosquitto__config *cfg)
+int run_broker(struct mosq_broker_config *broker_config)
 {
 
     struct mosquitto__config config;
-    if (cfg) {
-        memcpy(&config, cfg, sizeof(config));
-    }
 #ifdef WITH_BRIDGE
     int i;
 #endif
@@ -134,7 +132,7 @@ int run_broker(struct mosquitto__config *cfg)
         log__printf(NULL, MOSQ_LOG_INFO, "Using default config.");
     }
 
-    if (listeners__add_local("127.0.0.1", 1883)) {
+    if (listeners__add_local(broker_config->host, broker_config->port)) {
         return 1;
     }
 

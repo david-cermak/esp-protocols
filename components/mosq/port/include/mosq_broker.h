@@ -8,4 +8,9 @@
 
 struct mosquitto__config;
 
-int run_broker(struct mosquitto__config *config);
+struct mosq_broker_config {
+    char *host;
+    int port;
+};
+
+int run_broker(struct mosq_broker_config *config);

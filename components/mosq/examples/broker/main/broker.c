@@ -10,9 +10,11 @@
 #include "mqtt_client.h"
 #include "esp_log.h"
 #include "mosq_broker.h"
+#include "protocol_examples_common.h"
 
-#define TAG "test"
+const static char *TAG = "mqtt_broker";
 
+#if CONFIG_EXAMPLE_BROKER_RUN_LOCAL_MQTT_CLIENT
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
@@ -67,23 +69,42 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 static void mqtt_app_start(void *ctx)
 {
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    struct mosq_broker_config *config = ctx;
+
+    vTaskDelay(pdMS_TO_TICKS(1000));    // wait a second for the broker to start
     esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = "mqtt://127.0.0.1",
+        .broker.address.hostname = config->host,
+        .broker.address.transport = MQTT_TRANSPORT_OVER_TCP,    // we support only TCP transport now
+        .broker.address.port = config->port,
     };
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
     esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(client);
     vTaskDelete(NULL);
 }
+#endif // CONFIG_EXAMPLE_BROKER_RUN_LOCAL_MQTT_CLIENT
 
 void app_main(void)
 {
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    xTaskCreate(mqtt_app_start, "mqtt_app_start", 4096, NULL, 4, NULL);
+    ESP_ERROR_CHECK(example_connect());
 
+    struct mosq_broker_config config = { .host = NULL, .port = CONFIG_EXAMPLE_BROKER_PORT };
+#if CONFIG_EXAMPLE_BROKER_USE_CONNECTED_NETIF
+    esp_netif_ip_info_t ip;
+    char bind_host[4 * 4];  // to hold IPv4 address
+    ESP_ERROR_CHECK(esp_netif_get_ip_info(get_example_netif(), &ip));
+    esp_ip4addr_ntoa(&ip.ip, bind_host, sizeof(bind_host));
+    config.host = bind_host;
+#else
+    config.host = CONFIG_EXAMPLE_BROKER_HOST;
+#endif
 
-    run_broker(NULL);
+#if CONFIG_EXAMPLE_BROKER_RUN_LOCAL_MQTT_CLIENT
+    xTaskCreate(mqtt_app_start, "mqtt_client", 4096, &config, 4, NULL);
+#endif
+    // broker continues to run in this task
+    run_broker(&config);
 }

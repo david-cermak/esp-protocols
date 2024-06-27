@@ -1,4 +1,0 @@
-dependencies:
-  espressif/mosq:
-    version: "*"
-    override_path: "../../.."
