@@ -10,7 +10,7 @@
 #define isspace(__c) (__ctype_lookup((int)__c)&_S)
 
 #include_next "config.h"
-#define VERSION "0.1.0"
+#define VERSION "v2.0.18~0"
 
 #define _SC_OPEN_MAX_OVERRIDE                 4
 
