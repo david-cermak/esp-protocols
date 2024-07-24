@@ -5,9 +5,9 @@
  */
 #pragma once
 #include <ctype.h>
-
-#undef  isspace
-#define isspace(__c) (__ctype_lookup((int)__c)&_S)
+#include <limits.h>
+// #undef  isspace
+// #define isspace(__c) (__ctype_lookup((int)__c)&_S)
 
 #include_next "config.h"
 #define VERSION "v2.0.18~0"

@@ -5,7 +5,7 @@
  */
 #pragma once
 
-#define gai_strerror(x) "gai_strerror() not supported"
+// #define gai_strerror(x) "gai_strerror() not supported"
 
 struct ifaddrs {
     struct ifaddrs  *ifa_next;    /* Next item in list */

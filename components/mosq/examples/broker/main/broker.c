@@ -10,7 +10,7 @@
 #include "mqtt_client.h"
 #include "esp_log.h"
 #include "mosq_broker.h"
-#include "protocol_examples_common.h"
+// #include "protocol_examples_common.h"
 
 const static char *TAG = "mqtt_broker";
 
@@ -84,27 +84,28 @@ static void mqtt_app_start(void *ctx)
 }
 #endif // CONFIG_EXAMPLE_BROKER_RUN_LOCAL_MQTT_CLIENT
 
-void app_main(void)
+int main(void)
 {
-    ESP_ERROR_CHECK(nvs_flash_init());
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    ESP_ERROR_CHECK(example_connect());
+    // ESP_ERROR_CHECK(nvs_flash_init());
+    // ESP_ERROR_CHECK(esp_netif_init());
+    // ESP_ERROR_CHECK(esp_event_loop_create_default());
+    // ESP_ERROR_CHECK(example_connect());
 
     struct mosq_broker_config config = { .host = NULL, .port = CONFIG_EXAMPLE_BROKER_PORT };
-#if CONFIG_EXAMPLE_BROKER_USE_CONNECTED_NETIF
-    esp_netif_ip_info_t ip;
-    char bind_host[4 * 4];  // to hold IPv4 address
-    ESP_ERROR_CHECK(esp_netif_get_ip_info(get_example_netif(), &ip));
-    esp_ip4addr_ntoa(&ip.ip, bind_host, sizeof(bind_host));
-    config.host = bind_host;
-#else
+// #if CONFIG_EXAMPLE_BROKER_USE_CONNECTED_NETIF
+//     esp_netif_ip_info_t ip;
+//     char bind_host[4 * 4];  // to hold IPv4 address
+//     ESP_ERROR_CHECK(esp_netif_get_ip_info(get_example_netif(), &ip));
+//     esp_ip4addr_ntoa(&ip.ip, bind_host, sizeof(bind_host));
+//     config.host = bind_host;
+// #else
     config.host = CONFIG_EXAMPLE_BROKER_HOST;
-#endif
+// #endif
 
-#if CONFIG_EXAMPLE_BROKER_RUN_LOCAL_MQTT_CLIENT
-    xTaskCreate(mqtt_app_start, "mqtt_client", 4096, &config, 4, NULL);
-#endif
+// #if CONFIG_EXAMPLE_BROKER_RUN_LOCAL_MQTT_CLIENT
+//     xTaskCreate(mqtt_app_start, "mqtt_client", 4096, &config, 4, NULL);
+// #endif
     // broker continues to run in this task
     run_broker(&config);
+    return 0;
 }

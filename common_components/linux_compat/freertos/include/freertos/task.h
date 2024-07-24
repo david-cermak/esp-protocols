@@ -21,6 +21,7 @@ void xTaskNotifyGive(TaskHandle_t task);
 TaskHandle_t xTaskGetCurrentTaskHandle(void);
 
 BaseType_t xTaskNotifyWait(uint32_t bits_entry_clear, uint32_t bits_exit_clear, uint32_t *value, TickType_t wait_time );
+uint32_t ulTaskNotifyTake(BaseType_t xClearCountOnExit, TickType_t xTicksToWait );
 
 BaseType_t xTaskCreatePinnedToCore( TaskFunction_t pvTaskCode,
                                     const char *const pcName,
