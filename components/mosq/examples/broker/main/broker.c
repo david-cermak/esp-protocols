@@ -92,6 +92,7 @@ int main(void)
     // ESP_ERROR_CHECK(example_connect());
 
     struct mosq_broker_config config = { .host = NULL, .port = CONFIG_EXAMPLE_BROKER_PORT };
+//    struct mosq_broker_config config = { .host = NULL, .port = 1122 };
 // #if CONFIG_EXAMPLE_BROKER_USE_CONNECTED_NETIF
 //     esp_netif_ip_info_t ip;
 //     char bind_host[4 * 4];  // to hold IPv4 address
@@ -99,7 +100,7 @@ int main(void)
 //     esp_ip4addr_ntoa(&ip.ip, bind_host, sizeof(bind_host));
 //     config.host = bind_host;
 // #else
-    config.host = CONFIG_EXAMPLE_BROKER_HOST;
+    config.host = "127.0.0.1";
 // #endif
 
 // #if CONFIG_EXAMPLE_BROKER_RUN_LOCAL_MQTT_CLIENT

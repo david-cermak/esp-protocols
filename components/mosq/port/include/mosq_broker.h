@@ -11,6 +11,7 @@ struct mosquitto__config;
 struct mosq_broker_config {
     char *host;
     int port;
+    char *client_name;
 };
 
 int run_broker(struct mosq_broker_config *config);

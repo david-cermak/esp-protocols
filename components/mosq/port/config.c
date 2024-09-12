@@ -240,5 +240,6 @@ char *misc__trimblanks(char *str)
 // fork() is used in mosquitto.c to deamonize the broker, which we do not call.
 pid_t fork (void)
 {
+    abort();
     return 0;
 }
