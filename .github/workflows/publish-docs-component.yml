@@ -7,18 +7,16 @@ on:
       - release-modem-v1.4
 
 env:
-  DOCS_DEPLOY_URL_BASE: ${{ secrets.DOCS_DEPLOY_URL_BASE }}
-  DOCS_DEPLOY_SERVER: ${{ secrets.DOCS_DEPLOY_SERVER }}
-  DOCS_DEPLOY_SERVER_USER: ${{ secrets.DOCS_DEPLOY_SERVER_USER }}
-  DOCS_DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_PRIVATEKEY }}
-  DOCS_DEPLOY_PATH_ORIG : ${{ secrets.DOCS_DEPLOY_PATH }}
+  DOCS_DEPLOY_URL_BASE: ${{ secrets.DOCS_DEPLOY_URL_BASE2 }}
+  DOCS_DEPLOY_SERVER: ${{ secrets.DOCS_DEPLOY_SERVER2 }}
+  DOCS_DEPLOY_SERVER_USER: ${{ secrets.DOCS_DEPLOY_SERVER_USER2 }}
+  DOCS_DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_PRIVATEKEY2 }}
+  DOCS_DEPLOY_PATH_ORIG : ${{ secrets.DOCS_DEPLOY_PATH2 }}
 
 jobs:
   publish:
     name: Publish Tag, Release, Docs, Component
     runs-on: ubuntu-latest
-    # Skip running on forks since it won't have access to secrets
-    if: github.repository == 'espressif/esp-protocols'
     steps:
       - name: Checkout esp-protocols
         uses: actions/checkout@v4
@@ -105,4 +103,4 @@ jobs:
             components/sock_utils;
             components/libwebsockets;
           namespace: "espressif"
-          api_token: ${{ secrets.IDF_COMPONENT_API_TOKEN }}
+          api_token: ${{ secrets.IDF_COMPONENT_API_TOKEN2 }}
