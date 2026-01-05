@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -15,21 +15,42 @@ void destroy_tt(void *tt);
 
 void set_tout(void *tt, uint32_t ms);
 
+void set_tout_once(void *tt, uint32_t ms);
+
+void stop_tout(void *tt);
+
 esp_err_t esp_timer_create(const esp_timer_create_args_t *create_args,
                            esp_timer_handle_t *out_handle)
 {
     *out_handle = (esp_timer_handle_t)create_tt(create_args->callback);
+
     return ESP_OK;
 }
 
+esp_err_t esp_timer_start_once(esp_timer_handle_t timer, uint64_t period)
+{
+    uint32_t ms = period / 1000;
+    if (ms == 0 && period > 0) {
+        ms = 1;
+    }
+    set_tout_once(timer, ms);
+    return ESP_OK;
+}
+
+
 esp_err_t esp_timer_start_periodic(esp_timer_handle_t timer, uint64_t period)
 {
-    set_tout(timer, period / 1000);
+    uint32_t ms = period / 1000;
+    if (ms == 0 && period > 0) {
+        ms = 1;
+    }
+    set_tout(timer, ms);
     return ESP_OK;
 }
 
 esp_err_t esp_timer_stop(esp_timer_handle_t timer)
 {
+    stop_tout(timer);
     return ESP_OK;
 }
 

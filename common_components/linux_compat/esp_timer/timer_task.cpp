@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2026 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,5 +26,17 @@ extern "C" void destroy_tt(void *tt)
 extern "C" void set_tout(void *tt, uint32_t ms)
 {
     auto *timer_task = static_cast<TimerTaskMock *>(tt);
-    timer_task->SetTimeout(ms);
+    timer_task->SetTimeoutPeriodic(ms);
+}
+
+extern "C" void set_tout_once(void *tt, uint32_t ms)
+{
+    auto *timer_task = static_cast<TimerTaskMock *>(tt);
+    timer_task->SetTimeoutOnce(ms);
+}
+
+extern "C" void stop_tout(void *tt)
+{
+    auto *timer_task = static_cast<TimerTaskMock *>(tt);
+    timer_task->Stop();
 }
