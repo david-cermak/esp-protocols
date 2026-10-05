@@ -127,6 +127,27 @@ public:
      */
     void set_transmit_hooks(transmit_hook_t before_tx, transmit_hook_t after_tx);
 
+    using receive_hook_t = Terminal::receive_hook_t;
+
+    /**
+     * @brief Register RX-side hooks on the physical terminal.
+     *
+     * Complements set_transmit_hooks() for modem host-sleep (QSCLK / CSCLK / UPSV)
+     * while PPP stays up during ESP light sleep. UART_WAKEUP is not a URC: the
+     * first PPP frame after wake may be lost, so the host typically opens a longer
+     * bootstrap window, then extends a shorter idle window on further RX activity.
+     *
+     * @param on_uart_wakeup Called when the UART driver reports UART_WAKEUP
+     *        (nullptr to clear). No-op on terminals without wakeup events.
+     * @param on_rx_activity Called when RX bytes are observed, before on_read
+     *        (nullptr to clear). May repeat while data remains buffered.
+     *
+     * @note Installed on the physical UART even after CMUX wraps it. Both hooks
+     *       run on the terminal RX task; keep them short and non-blocking.
+     *       esp_modem does not enable UART wakeup or implement sleep-window policy.
+     */
+    void set_receive_hooks(receive_hook_t on_uart_wakeup, receive_hook_t on_rx_activity);
+
 #ifdef CONFIG_ESP_MODEM_URC_HANDLER
     /**
      * @brief Allow setting a line callback for all incoming data
@@ -233,8 +254,15 @@ private:
         transmit_hook_t after;
     };
 
+    struct ReceiveHooks {
+        receive_hook_t wakeup;
+        receive_hook_t activity;
+    };
+
     /** Loads the current hook pair; nullptr if unset or cleared. */
     std::shared_ptr<const TransmitHooks> load_transmit_hooks();
+    std::shared_ptr<const ReceiveHooks> load_receive_hooks();
+    void apply_receive_hooks();
 
 #ifdef CONFIG_ESP_MODEM_URC_HANDLER
     /**
@@ -272,9 +300,11 @@ private:
     std::function<bool(uint8_t *data, size_t len)> on_data; /*!< on data callback for current terminal */
     std::function<void(terminal_error err)> user_error_cb;  /*!< user callback on error event from attached terminals */
 #if defined(__cpp_lib_atomic_shared_ptr)
-    std::atomic<std::shared_ptr<const TransmitHooks>> transmit_hooks_ {}; /*!< Immutable hook pair */
+    std::atomic<std::shared_ptr<const TransmitHooks>> transmit_hooks_ {}; /*!< Immutable TX hook pair */
+    std::atomic<std::shared_ptr<const ReceiveHooks>> receive_hooks_ {};   /*!< Immutable RX hook pair */
 #else
-    std::shared_ptr<const TransmitHooks> transmit_hooks_;                /*!< Immutable hook pair; use std::atomic_{load,store} */
+    std::shared_ptr<const TransmitHooks> transmit_hooks_;                /*!< Immutable TX hook pair; use std::atomic_{load,store} */
+    std::shared_ptr<const ReceiveHooks> receive_hooks_;                  /*!< Immutable RX hook pair; use std::atomic_{load,store} */
 #endif
 
 #ifdef CONFIG_ESP_MODEM_USE_INFLATABLE_BUFFER_IF_NEEDED

@@ -75,11 +75,16 @@ DTE::~DTE()
         primary_term->stop();
         primary_term->set_read_cb(nullptr);
         primary_term->set_error_cb(nullptr);
+        primary_term->set_receive_hooks(nullptr, nullptr);
     }
     if (secondary_term && secondary_term != primary_term) {
         secondary_term->stop();
         secondary_term->set_read_cb(nullptr);
         secondary_term->set_error_cb(nullptr);
+        secondary_term->set_receive_hooks(nullptr, nullptr);
+    }
+    if (cmux_term) {
+        cmux_term->set_receive_hooks(nullptr, nullptr);
     }
 }
 
@@ -232,6 +237,7 @@ void DTE::exit_cmux_internal()
     buffer = std::move(ejected.second);
     secondary_term = primary_term;
     set_command_callbacks();
+    apply_receive_hooks();
 }
 
 bool DTE::setup_cmux()
@@ -259,6 +265,7 @@ bool DTE::setup_cmux()
         return false;
     }
     set_command_callbacks();
+    apply_receive_hooks();
     return true;
 }
 
@@ -389,6 +396,50 @@ void DTE::set_transmit_hooks(transmit_hook_t before_tx, transmit_hook_t after_tx
 #else
     std::atomic_store_explicit(&transmit_hooks_, std::move(p), std::memory_order_release);
 #endif
+}
+
+std::shared_ptr<const DTE::ReceiveHooks> DTE::load_receive_hooks()
+{
+#if defined(__cpp_lib_atomic_shared_ptr)
+    return receive_hooks_.load(std::memory_order_acquire);
+#else
+    return std::atomic_load_explicit(&receive_hooks_, std::memory_order_acquire);
+#endif
+}
+
+void DTE::apply_receive_hooks()
+{
+    receive_hook_t wakeup;
+    receive_hook_t activity;
+    auto hooks = load_receive_hooks();
+    if (hooks) {
+        wakeup = hooks->wakeup;
+        activity = hooks->activity;
+    }
+    if (cmux_term) {
+        cmux_term->set_receive_hooks(std::move(wakeup), std::move(activity));
+        return;
+    }
+    if (primary_term) {
+        primary_term->set_receive_hooks(wakeup, activity);
+    }
+    if (secondary_term && secondary_term != primary_term) {
+        secondary_term->set_receive_hooks(std::move(wakeup), std::move(activity));
+    }
+}
+
+void DTE::set_receive_hooks(receive_hook_t on_uart_wakeup, receive_hook_t on_rx_activity)
+{
+    std::shared_ptr<const ReceiveHooks> p;
+    if (on_uart_wakeup || on_rx_activity) {
+        p = std::make_shared<ReceiveHooks>(std::move(on_uart_wakeup), std::move(on_rx_activity));
+    }
+#if defined(__cpp_lib_atomic_shared_ptr)
+    receive_hooks_.store(std::move(p), std::memory_order_release);
+#else
+    std::atomic_store_explicit(&receive_hooks_, std::move(p), std::memory_order_release);
+#endif
+    apply_receive_hooks();
 }
 
 int DTE::write(uint8_t *data, size_t len)

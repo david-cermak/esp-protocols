@@ -274,6 +274,58 @@ TEST_CASE("Transmit hooks", "[esp_modem][hooks]")
     }
 }
 
+TEST_CASE("Receive hooks", "[esp_modem][hooks]")
+{
+    auto dte = create_test_dte();
+    REQUIRE(dte != nullptr);
+
+    SECTION("activity fires on AT command reply") {
+        std::atomic<int> activity_count{0};
+
+        dte->set_receive_hooks(
+            nullptr,
+        [&activity_count]() {
+            activity_count++;
+        }
+        );
+
+        esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG("internet");
+        esp_netif_t netif{};
+        auto dce = create_SIM7600_dce(&dce_config, dte, &netif);
+        REQUIRE(dce != nullptr);
+
+        int rssi, ber;
+        CHECK(dce->get_signal_quality(rssi, ber) == command_result::OK);
+        CHECK(activity_count.load() > 0);
+    }
+
+    SECTION("activity hook can be cleared") {
+        std::atomic<int> activity_count{0};
+
+        dte->set_receive_hooks(
+            nullptr,
+        [&activity_count]() {
+            activity_count++;
+        }
+        );
+
+        esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG("internet");
+        esp_netif_t netif{};
+        auto dce = create_SIM7600_dce(&dce_config, dte, &netif);
+        REQUIRE(dce != nullptr);
+
+        CHECK(dce->set_command_mode() == command_result::OK);
+        int after_first = activity_count.load();
+        CHECK(after_first > 0);
+
+        dte->set_receive_hooks(nullptr, nullptr);
+
+        std::string imei;
+        CHECK(dce->get_imei(imei) == command_result::OK);
+        CHECK(activity_count.load() == after_first);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     return Catch::Session().run(argc, argv);
